@@ -2,7 +2,7 @@
   "targets": {
     "lobbygame-df377": {
       "hosting": {
-        "FPSTest": [
+        "lobbyGame": [
           "lobbygame-df377"
         ]
       }

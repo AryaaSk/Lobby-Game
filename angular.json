@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "FPSTest": {
+    "lobbyGame": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:application": {
@@ -17,7 +17,7 @@
         "build": {
           "builder": "@angular-devkit/build-angular:browser",
           "options": {
-            "outputPath": "dist/fpstest",
+            "outputPath": "dist/lobbyGame",
             "index": "src/index.html",
             "main": "src/main.ts",
             "polyfills": "src/polyfills.ts",
@@ -68,10 +68,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "browserTarget": "FPSTest:build:production"
+              "browserTarget": "lobbyGame:build:production"
             },
             "development": {
-              "browserTarget": "FPSTest:build:development"
+              "browserTarget": "lobbyGame:build:development"
             }
           },
           "defaultConfiguration": "development"
@@ -79,7 +79,7 @@
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "browserTarget": "FPSTest:build"
+            "browserTarget": "lobbyGame:build"
           }
         },
         "test": {
@@ -104,7 +104,7 @@
           "options": {
             "prerender": false,
             "ssr": false,
-            "browserTarget": "FPSTest:build:production",
+            "browserTarget": "lobbyGame:build:production",
             "firebaseProject": "lobbygame-df377",
             "firebaseHostingSite": "lobbygame-df377"
           }
@@ -112,5 +112,5 @@
       }
     }
   },
-  "defaultProject": "FPSTest"
+  "defaultProject": "lobbyGame"
 }

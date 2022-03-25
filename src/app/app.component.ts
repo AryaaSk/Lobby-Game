@@ -12,7 +12,7 @@ import { Database, ref, set, onValue} from '@angular/fire/database';
   styleUrls: ['./app.component.css']
 })
 export class AppComponent {
-  title = 'FPSTest';
+  title = 'lobbyGame';
   constructor (private db: Database) {}
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
@@ -131,7 +131,7 @@ export class AppComponent {
       let i = 0;
       while (i != this.keysDown.length)
       {
-        const key = this.keysDown[i];
+        const key = this.keysDown[i].toLowerCase();
         switch (key)
         {
           case "w":
@@ -210,7 +210,7 @@ export class AppComponent {
             const newPlayer = new box();
             newPlayer.id = deviceID;
 
-            newPlayer.createObject(this.scene, this.world, {width: 5, height: 7, depth: 5}, 0xFF00FF, 10000); //set mass to 10000 so that the other players cannot be moved by the first player
+            newPlayer.createObject(this.scene, this.world, {width: 5, height: 7, depth: 5}, 0xFF00FF, 0); //set mass to 10000 so that the other players cannot be moved by the first player
             newPlayer.cBody.angularDamping = 1;
             newPlayer.tBody.receiveShadow = true;
             newPlayer.tBody.castShadow = true;

@@ -1,7 +1,7 @@
 {
   "hosting": {
-    "target": "FPSTest",
-    "public": "dist/fpstest",
+    "target": "lobbyGame",
+    "public": "dist/lobbyGame",
     "ignore": [
       "**/.*"
     ],
