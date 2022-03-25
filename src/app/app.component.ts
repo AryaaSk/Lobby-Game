@@ -22,10 +22,10 @@ export class AppComponent {
   cannonDebugRenderer = new CannonDebugRenderer( this.scene, this.world );
 
   plane = new box();
+  block1 = new box();
   player = new box();
 
-  block1 = new box();
-
+  noFrictionMaterial = new CANNON.Material( { friction: 0.0 } );;
   otherObjects: CANNON.Body[] = []; //list of all other objects in scene
 
   render()
@@ -68,20 +68,21 @@ export class AppComponent {
     pointLight.shadow.mapSize.height = 2048;
     this.scene.add(pointLight);
 
-
     this.world.gravity.set(0, -20, 0)
 
 
     //Create Objects:
     this.plane.createObject(this.scene, this.world, { width: 100, height: 10, depth: 100 }, 0x0b7d2d, 0);
     this.plane.tBody.receiveShadow = true;
+    this.plane.cBody.material = new CANNON.Material( { friction: 0.0 } );
 
-    this.block1.createObject(this.scene, this.world, {width: 5, height: 5, depth: 5}, 0x0000FF, 10000);
+    this.block1.createObject(this.scene, this.world, {width: 5, height: 5, depth: 5}, 0x0000FF, 100000);
     this.block1.tBody.position.x = -20;
     this.block1.tBody.position.y = 7;
     this.block1.updateCANNONPosition();
     this.block1.tBody.receiveShadow = true;
     this.block1.tBody.castShadow = true;
+    this.block1.cBody.material = this.noFrictionMaterial;
 
     //going to create the player's cBody as a sphere, since they move more smoothly
     const playerWidth = 5;
@@ -99,13 +100,7 @@ export class AppComponent {
     this.player.tBody.receiveShadow = true;
     this.player.tBody.castShadow = true;
     this.player.cBody.angularDamping = 1; //rotation lock
-
-
-    //Create collision interactions:
-    this.player.cBody.material = new CANNON.Material();
-    this.plane.cBody.material = new CANNON.Material();
-    const slipperyContactMaterial = new CANNON.ContactMaterial(this.player.cBody.material, this.plane.cBody.material, { friction: 0.0 }); //friction set to 0.0 seems to solve all the problems
-    this.world.addContactMaterial(slipperyContactMaterial);
+    this.player.cBody.material = this.noFrictionMaterial;
 
     this.otherObjects.push(this.plane.cBody);
     this.otherObjects.push(this.block1.cBody);
@@ -117,6 +112,8 @@ export class AppComponent {
 
   startAnimationLoop()
   {
+    //TODO: Implement delta time
+
     setInterval(() => {
       //check the keysDown and apply the information, before we step the world
 
@@ -179,14 +176,9 @@ export class AppComponent {
       const currentSpeed = Math.sqrt(currentVelocity.x**2 + currentVelocity.z**2);
       const appliedForce = Math.abs(speed - currentSpeed); //to keep it at a stable 30 (not currently needed since I reset the speed before each movement)
 
-      /*TURNS OUT I DON'T HAVE TO CALCULATE THE ABSOULTE VECTOR, I CAN JUST USE APPLYLOCALIMPLISE AND NORMALIZE THE QUARTERNION */ /*
-      let rotation = this.player.bearing.y % 90;
-      //the negative and positive rotations will be confusing, so convert them all into positve in terms of the 90 degree triangle
-      if (rotation < 0) rotation = 90 + rotation;
-      //we have the rotation and the appliedForce, now we can work out the changeZ and changeX, using trignometry, first we need to convert to radians
-      function toRadians (angle: number) {
-        return angle * (Math.PI / 180);
-      } */
+      const yVelocity = Math.abs(currentVelocity.y); //check velocity in y-axis, if it is >1 then don't allow another jump, since it could cause jump stacking
+      if (yVelocity > 1)
+      { movementVector.y = 0; }
 
       const impluseVector = new CANNON.Vec3(appliedForce * movementVector.x, jumpHeight * movementVector.y, appliedForce * movementVector.z); 
       this.player.cBody.applyLocalImpulse(impluseVector);
@@ -214,6 +206,7 @@ export class AppComponent {
             newPlayer.cBody.angularDamping = 1;
             newPlayer.tBody.receiveShadow = true;
             newPlayer.tBody.castShadow = true;
+            newPlayer.cBody.material =  this.noFrictionMaterial;;
 
             this.otherPlayersRendered[deviceID] = newPlayer; //add it to the rendered objects
             this.otherObjects.push(newPlayer.cBody);
