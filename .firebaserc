@@ -1,0 +1,14 @@
+{
+  "targets": {
+    "lobbygame-df377": {
+      "hosting": {
+        "FPSTest": [
+          "lobbygame-df377"
+        ]
+      }
+    }
+  },
+  "projects": {
+    "default": "lobbygame-df377"
+  }
+}

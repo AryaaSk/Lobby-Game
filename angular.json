@@ -98,6 +98,16 @@
             ],
             "scripts": []
           }
+        },
+        "deploy": {
+          "builder": "@angular/fire:deploy",
+          "options": {
+            "prerender": false,
+            "ssr": false,
+            "browserTarget": "FPSTest:build:production",
+            "firebaseProject": "lobbygame-df377",
+            "firebaseHostingSite": "lobbygame-df377"
+          }
         }
       }
     }
