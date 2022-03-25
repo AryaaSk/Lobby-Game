@@ -34,6 +34,8 @@ export class AppComponent {
   deviceID = 100;
   ngAfterViewInit()
   {
+    document.body.addEventListener( 'click', function () { document.body.requestPointerLock(); }, false ); //lock mouse on screen when game starts
+
     //check if there is already a deviceID in localStorage
     if (localStorage.getItem("id") == undefined)
     {
@@ -52,9 +54,10 @@ export class AppComponent {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    this.camera.position.z = 30;
+    //this.camera.position.z = 30;
     this.camera.position.y = 30;
-    this.camera.rotation.x = -0.5;
+    //this.camera.rotation.x = -0.5;
+    this.camera.rotateX(this.toRadians(-0.5));
 
     const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.3);
     this.scene.add(ambientLight);
@@ -64,8 +67,8 @@ export class AppComponent {
     pointLight.position.y = 50;
     pointLight.position.z = 50;
     pointLight.castShadow = true;
-    pointLight.shadow.mapSize.width = 2048; //this increases the quality
-    pointLight.shadow.mapSize.height = 2048;
+    pointLight.shadow.mapSize.width = 1024; //this increases the quality
+    pointLight.shadow.mapSize.height = 1024;
     this.scene.add(pointLight);
 
     this.world.gravity.set(0, -20, 0)
@@ -113,8 +116,12 @@ export class AppComponent {
   startAnimationLoop()
   {
     //TODO: Implement delta time
-
+    let lastUpdate = Date.now();
     setInterval(() => {
+      const now = Date.now();
+      const deltaTime = now - lastUpdate;
+      lastUpdate = now;
+
       //check the keysDown and apply the information, before we step the world
 
       //calculate the overall force, rather than individually applying the forces, then just apply the overally force after each run of the switch statement
@@ -155,14 +162,14 @@ export class AppComponent {
             }
             break;
 
-
-          case "ArrowLeft":
+          /*
+          case "arrowleft":
             rotationY -= rotationSpeed;
             break;
-          case "ArrowRight":
+          case "arrowright":
             rotationY += rotationSpeed;
             break;
-
+          */
 
           default:
             break;
@@ -230,7 +237,7 @@ export class AppComponent {
         }
       }
 
-      this.world.step(1 / 60);
+      this.world.step(deltaTime / 1000);
 
       //update object positions:
       this.plane.updateTHREEPosition();
@@ -272,25 +279,64 @@ export class AppComponent {
     //then we just add these players like usual in the animation loop
   }
 
-  syncCamera(object: CANNON.Body, camera: THREE.PerspectiveCamera, offsetX: number, offsetY: number, offsetZ: number)
-  {
-    //just move the camera to the position + offset
-    camera.position.set(object.position.x + offsetX, object.position.y + offsetY, object.position.z + offsetZ)
-  }
 
   syncCameraToPlayer()
   {
-    const offsetZ = 30;
+    //const offsetZ = 30;
+    const distance = 30;
     const setY = 20;
-    this.camera.position.set(this.player.tBody.position.x, setY, this.player.tBody.position.z + offsetZ);
+
+    //we also want to match the camera to the player's bearing.y
+    const cameraRotationY = -this.player.bearing.y
+    this.camera.rotation.y = this.toRadians(cameraRotationY);
+
+    //position exactly where player is, then move backwards by distance
+    this.camera.position.set(this.player.tBody.position.x, setY, this.player.tBody.position.z);
+
+    this.camera.translateZ(distance);
+
+    //need to use trignometry to calculate the offsetX and offsetZ values
+    const offsetX = Math.sin(this.toRadians(30)) * 30;
+    const offsetZ = Math.tan(this.toRadians(30)) * 30;
+
+    //this.camera.position.set(this.player.tBody.position.x + offsetX, setY, this.player.tBody.position.z + offsetZ);
   }
 
   keysDown: string[] = []
+  qPressed = false; //press q to stop the mouse from affecting movement
   startMovementListeners()
   {
     document.onkeydown = ($e) =>  //so there is only ever 1 key of 1 type in the array
-    { if (this.keysDown.includes($e.key) == false) this.keysDown.push($e.key); }
+    {  
+      if ($e.key == "q") //tab doesnt need to be handled in the main game loop
+      { document.exitPointerLock(); this.qPressed = true; return; }
+
+      if (this.keysDown.includes($e.key) == false) this.keysDown.push($e.key);
+    }
     document.onkeyup = ($e) =>
-    { this.keysDown.splice(this.keysDown.indexOf($e.key), 1); }
+    { 
+      if ($e.key == "q")
+      { document.body.requestPointerLock(); this.qPressed = false; return;}
+
+      this.keysDown.splice(this.keysDown.indexOf($e.key), 1);
+    }
+
+    //also look for moues movement here which will control the player's rotation 
+    document.onmousemove = ($e) =>
+    {
+      const rotationY = $e.movementX / 5;
+      //const screenPercentage = ($e.clientX / window.innerWidth) - 0.5; //use the entire screen for movement
+      //const rotationY = 360 * screenPercentage; //convert into a rotation
+
+      if (this.qPressed == false)
+      {
+        this.player.bearing.y += rotationY;
+        this.player.updateObjectBearing();
+      }
+    }
+  }
+
+  toRadians(angle: number) {
+    return angle * (Math.PI / 180);
   }
 }

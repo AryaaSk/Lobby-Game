@@ -110,7 +110,7 @@ export class box extends cannonObject //same thing but for boxs
         if (customThreeObject != null) //overriding the three object which was just created
         { this.tBody = customThreeObject; }
 
-        const cGeo = new CANNON.Box( new CANNON.Vec3(this.dimensions.width / 2, this.dimensions.height / 2, this.dimensions.depth / 2) )
+        const cGeo = new CANNON.Box( new CANNON.Vec3(this.dimensions.width / 2, this.dimensions.height / 2, this.dimensions.depth / 2))
         const cBody = new CANNON.Body( { mass: this.mass } )
         cBody.addShape(cGeo);
         this.cBody = cBody;
