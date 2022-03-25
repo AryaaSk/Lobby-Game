@@ -113,7 +113,7 @@ export class AppComponent {
     this.startAnimationLoop();
     this.startMovementListeners();
     this.startDataLoop();
-  }
+  } 
 
   startAnimationLoop()
   {
