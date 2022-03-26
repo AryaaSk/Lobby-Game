@@ -16,40 +16,89 @@ export class AppComponent {
   title = 'lobbyGame';
   constructor (private db: Database) {}
 
+
+  //OBJECTS:
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
   renderer = new THREE.WebGLRenderer()
   scene = new THREE.Scene();
   world = new CANNON.World();
   cannonDebugRenderer = new CannonDebugRenderer( this.scene, this.world );
-
   plane = new box();
   block1 = new box();
   player = new box();
-
-  noFrictionMaterial = new CANNON.Material( { friction: 0.0 } );;
   otherObjects: CANNON.Body[] = []; //list of all other objects in scene
 
+
+  //Materials:
+  noFrictionMaterial = new CANNON.Material( { friction: 0.0 } );;
+
+
+  //CONSTANTS:
+  settings = {
+    dimensions: {width: 5, height: 7, depth: 5},
+    speed: 40,
+    jumpHeight: 30,
+
+    camera: {setY: 20, distance: 30}
+  };
+
+
+  //DYNAMIC CONSTANTS:
+  deviceID = 100;
+  pointerLock = false;
+  otherPlayersObjects: {[k: number] : {deviceID: number, position: {x: number, y: number, z: number}, rotation: {x: number, y: number, z: number}, currentImpluse: {x: number, y: number, z: number}}} = {}
+  otherPlayersRendered: {[k: number] : box} = {}; //contains all the players which are currently rendered
+
+
+
+
+
+  
+  //STARTUP:
+  ngAfterViewInit()
+  {
+    this.worldSetup();
+
+    this.createObjets();
+    this.spawnPlayer();
+
+    this.startAnimationLoop();
+    this.startMovementListeners();
+    this.startDataLoop();
+  } 
+
+
+
+
+  
+  //Boilerplate Functions:
   render()
   { this.renderer.render(this.scene, this.camera); };
-
-  deviceID = 100;
-
-  pointerLock = false;
+  toRadians(angle: number) {
+    return angle * (Math.PI / 180);
+  }
   togglePointerLock()
   {
     if (this.pointerLock == true)
-    {
-      this.pointerLock = false;
-      document.exitPointerLock();
-    }
+    { this.pointerLock = false; document.exitPointerLock(); }
     else
-    {
-      this.pointerLock = true;
-      document.body.requestPointerLock();
-    }
+    { this.pointerLock = true; document.body.requestPointerLock(); }
+  }
+  syncCameraToPlayer()
+  {
+    const cameraRotationY = -this.player.bearing.y; this.camera.rotation.y = this.toRadians(cameraRotationY); //we also want to match the camera to the player's bearing.y
+    //position exactly where player is, then move backwards by distance
+    this.camera.position.set(this.player.tBody.position.x, this.settings.camera.setY, this.player.tBody.position.z);
+    this.camera.translateZ(this.settings.camera.distance);
   }
 
-  ngAfterViewInit()
+
+
+
+
+  
+  //WORLD FUNCTIONS:
+  worldSetup()
   {
     document.body.addEventListener( 'click', () => { document.body.requestPointerLock(); this.pointerLock = true; }, {once : true} ); //lock mouse on screen when game starts
     console.log("Click Q to toggle shoot mode")
@@ -58,8 +107,7 @@ export class AppComponent {
     if (localStorage.getItem("id") == undefined)
     {
       const randomID = Math.floor(Math.random() * (9999999999999999 - 1000000000000000 + 1) + 1000000000000000); //random number statistically almost guarnteed to be unique 
-      this.deviceID = randomID;
-      localStorage.setItem("id", String(randomID));
+      this.deviceID = randomID; localStorage.setItem("id", String(randomID));
     }
     else
     { this.deviceID = Number(localStorage.getItem("id")!); }
@@ -72,9 +120,7 @@ export class AppComponent {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-    //this.camera.position.z = 30;
     this.camera.position.y = 30;
-    //this.camera.rotation.x = -0.5;
     this.camera.rotateX(this.toRadians(-0.5));
 
     const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.3);
@@ -90,8 +136,9 @@ export class AppComponent {
     this.scene.add(pointLight);
 
     this.world.gravity.set(0, -50, 0)
-
-    //Create Objects:
+  }
+  createObjets()
+  {
     this.plane.createObject(this.scene, this.world, { width: 100, height: 10, depth: 100 }, 0x0b7d2d, 0);
     this.plane.tBody.receiveShadow = true;
     this.plane.tBody.name = "plane";
@@ -105,32 +152,32 @@ export class AppComponent {
     this.block1.tBody.castShadow = true;
     this.block1.cBody.material = this.noFrictionMaterial;
 
-    //going to create the player's cBody as a sphere, since they move more smoothly
-    const playerWidth = 5;
-    const playerHeight = 7;
-    const playerDepth = 5;
+    this.otherObjects.push(this.plane.cBody);
+    this.otherObjects.push(this.block1.cBody);
 
-    this.player.createObject(this.scene, this.world, { width: playerWidth, height: playerHeight, depth: playerDepth }, 0xFF0000, undefined, undefined, undefined);
-    const randomX = Math.floor((Math.random() * 40) + 1) - 40; //-40 -> -40 RANDOM SPAWN
-    const randomZ = Math.floor((Math.random() * 40) + 1) - 40;
-    this.player.tBody.position.x = randomX;
-    this.player.tBody.position.y = 15;
-    this.player.tBody.position.z = randomZ;
-    this.player.updateCANNONPosition();
+    this.player.createObject(this.scene, this.world, { width: this.settings.dimensions.width, height: this.settings.dimensions.height, depth: this.settings.dimensions.depth }, 0xFF0000, undefined, undefined, undefined);
     this.player.tBody.receiveShadow = true;
     this.player.tBody.castShadow = true;
     this.player.cBody.angularDamping = 1; //rotation lock
     this.player.cBody.linearDamping = 0.9; //we removed the friction but we still want an abrupt stop and start
     this.player.cBody.material = this.noFrictionMaterial;
+  }
+  spawnPlayer()
+  {
+    const randomX = Math.floor((Math.random() * 40) + 1) - 40; //-40 -> -40 RANDOM SPAWN
+    const randomZ = Math.floor((Math.random() * 40) + 1) - 40;
+    this.player.cBody.position.x = randomX;
+    this.player.cBody.position.y = 15;
+    this.player.cBody.position.z = randomZ;
+    this.player.cBody.velocity.set(0, 0, 0);
+  }
 
-    this.otherObjects.push(this.plane.cBody);
-    this.otherObjects.push(this.block1.cBody);
 
-    this.startAnimationLoop();
-    this.startMovementListeners();
-    this.startDataLoop();
-  } 
 
+
+
+  
+  //ANIMATION/TIME LOOP FUNCTIONS:
   startAnimationLoop()
   {
     //TODO: Implement delta time
@@ -140,12 +187,7 @@ export class AppComponent {
       const deltaTime = now - lastUpdate;
       lastUpdate = now;
 
-      //check the keysDown and apply the information, before we step the world
-
-      //calculate the overall force, rather than individually applying the forces, then just apply the overally force after each run of the switch statement
-      const speed = 40; 
-      const jumpHeight = 30;
-
+      //to move player, calculate the overall force, rather than individually applying the forces, then just apply the overally force after each run of the switch statement
       let movementVector = new CANNON.Vec3(0, 0, 0);
       let rotationY = 0;
 
@@ -189,32 +231,25 @@ export class AppComponent {
       //this.player.cBody.velocity = new CANNON.Vec3(0, this.player.cBody.velocity.y, 0);
       const currentVelocity = this.player.cBody.velocity;
       const currentSpeed = Math.sqrt(currentVelocity.x**2 + currentVelocity.z**2);
-      const appliedForce = Math.abs(speed - currentSpeed); //to keep it at a stable 30 (not currently needed since I reset the speed before each movement)
+      const appliedForce = Math.abs(this.settings.speed - currentSpeed); //to keep it at a stable 30 (not currently needed since I reset the speed before each movement)
 
       const yVelocity = Math.abs(currentVelocity.y); //check velocity in y-axis, if it is >1 then don't allow another jump, since it could cause jump stacking
       if (yVelocity > 1)
       { movementVector.y = 0; }
 
-      const impluseVector = new CANNON.Vec3(appliedForce * movementVector.x, jumpHeight * movementVector.y, appliedForce * movementVector.z); 
+      const impluseVector = new CANNON.Vec3(appliedForce * movementVector.x, this.settings.jumpHeight * movementVector.y, appliedForce * movementVector.z); 
       this.player.cBody.applyLocalImpulse(impluseVector);
       this.player.cBody.quaternion.normalize();
       
       this.player.bearing.y += rotationY;
       this.player.updateObjectBearing();
 
-
       //we can check if the player's y coordinate is <-10, if so then you know they have fallen off the edge and you can just restart the page and say they died
       if (this.player.cBody.position.y < -10)
       {
-        console.log("you died, respawn");
-        const randomX = Math.floor((Math.random() * 40) + 1) - 40; //-40 -> -40 RANDOM SPAWN
-        const randomZ = Math.floor((Math.random() * 40) + 1) - 40;
-        this.player.cBody.position.x = randomX;
-        this.player.cBody.position.y = 15;
-        this.player.cBody.position.z = randomZ;
-        this.player.cBody.velocity.set(0, 0, 0);
+        console.log("You have died, you will now respawn");
+        this.spawnPlayer();
       }
-
 
       //add other players:
       for (let key in this.otherPlayersObjects)
@@ -258,23 +293,17 @@ export class AppComponent {
         }
       }
 
+      //step world and update object positions:
       this.world.step(deltaTime / 1000);
-
-      //update object positions:
       this.plane.updateTHREEPosition();
-
+      this.block1.updateTHREEPosition();
       this.player.updateTHREEPosition();
       this.syncCameraToPlayer();
-
-      this.block1.updateTHREEPosition();
 
       //this.cannonDebugRenderer.update();
       this.render();
     }, 16);
   }
-
-  otherPlayersObjects: {[k: number] : {deviceID: number, position: {x: number, y: number, z: number}, rotation: {x: number, y: number, z: number}, currentImpluse: {x: number, y: number, z: number}}} = {}
-  otherPlayersRendered: {[k: number] : box} = {}; //contains all the players which are currently rendered
   startDataLoop() 
   {
     //I can't upload everytime in the main animation loop, since it would be too often
@@ -298,25 +327,16 @@ export class AppComponent {
     });
     this.lookForImpluse();
 
-    //then we just add these players like usual in the animation loop
+    //then we just add these players like usual during the animation loop
   }
 
 
-  syncCameraToPlayer()
-  {
-    //const offsetZ = 30;
-    const distance = 30;
-    const setY = 20;
 
-    //we also want to match the camera to the player's bearing.y
-    const cameraRotationY = -this.player.bearing.y
-    this.camera.rotation.y = this.toRadians(cameraRotationY);
 
-    //position exactly where player is, then move backwards by distance
-    this.camera.position.set(this.player.tBody.position.x, setY, this.player.tBody.position.z);
-    this.camera.translateZ(distance);
-  }
 
+
+
+  //SHOOTING EVENTS:
   shoot($e: MouseEvent)
   {
     if (this.pointerLock == true) //only register click when pointer lock is disabled
@@ -344,7 +364,7 @@ export class AppComponent {
       const blastRadiusMat = new THREE.MeshStandardMaterial( { color: 0xFFFFFF } )
       const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
       blastRadiusObject.position.set(destinationPoint.x, destinationPoint.y, destinationPoint.z);
-      this.scene.add(blastRadiusObject);
+      //this.scene.add(blastRadiusObject); //uncomment this line and comment the scene.remove() line if you want to visualise the blast radius
 
       //we can just use the intersects function to check
       const blastRadiusBB = new THREE.Box3().setFromObject(blastRadiusObject);
@@ -367,9 +387,7 @@ export class AppComponent {
           set(dbRef, playerKnockbackVector)
         }
       }
-
       this.scene.remove(blastRadiusObject);
-
     });
   }
   projectile(radius: number, shotVector: {x: number, y: number, z: number}) //just the animation for the shot
@@ -383,8 +401,6 @@ export class AppComponent {
       this.scene.add(projectile);
 
       //repeat the loop 100 times to shoot the projectile
-      
-
       const intervals = Math.sqrt(shotVector.x**2 + shotVector.z**2)
       const xIncrements = shotVector.x / intervals;
       const yInccrements = shotVector.y / intervals;
@@ -420,12 +436,18 @@ export class AppComponent {
     });
   }
 
+
+
+
+
+  
+  //KEYBOARD/MOUSE LISTENERS
   keysDown: string[] = []
   startMovementListeners()
   {
     document.onkeydown = ($e) =>  //so there is only ever 1 key of 1 type in the array
     {  
-      if ($e.key == "q") ////press q to stop the mouse from affecting movement
+      if ($e.key == "q" || $e.key == "Q") ////press q to stop the mouse from affecting movement
       { this.togglePointerLock(); return; }
       if (this.keysDown.includes($e.key) == false) this.keysDown.push($e.key);
     }
@@ -443,9 +465,5 @@ export class AppComponent {
 
     document.onmousedown = ($e) =>
     { this.shoot($e); }
-  }
-
-  toRadians(angle: number) {
-    return angle * (Math.PI / 180);
   }
 }
