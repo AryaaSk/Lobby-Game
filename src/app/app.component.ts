@@ -89,8 +89,7 @@ export class AppComponent {
     pointLight.shadow.mapSize.height = 1024;
     this.scene.add(pointLight);
 
-    this.world.gravity.set(0, -100, 0)
-
+    this.world.gravity.set(0, -50, 0)
 
     //Create Objects:
     this.plane.createObject(this.scene, this.world, { width: 100, height: 10, depth: 100 }, 0x0b7d2d, 0);
@@ -121,7 +120,7 @@ export class AppComponent {
     this.player.tBody.receiveShadow = true;
     this.player.tBody.castShadow = true;
     this.player.cBody.angularDamping = 1; //rotation lock
-    this.player.cBody.linearDamping = 0.999; //we removed the friction but we still want an abrupt stop and start
+    this.player.cBody.linearDamping = 0.9; //we removed the friction but we still want an abrupt stop and start
     this.player.cBody.material = this.noFrictionMaterial;
 
     this.otherObjects.push(this.plane.cBody);
@@ -145,8 +144,7 @@ export class AppComponent {
 
       //calculate the overall force, rather than individually applying the forces, then just apply the overally force after each run of the switch statement
       const speed = 40; 
-      const jumpHeight = 80; //had to multiply by 5 since i increased gravity by 5
-      const rotationSpeed = 3;
+      const jumpHeight = 30;
 
       let movementVector = new CANNON.Vec3(0, 0, 0);
       let rotationY = 0;
@@ -181,15 +179,6 @@ export class AppComponent {
             }
             break;
 
-          /*
-          case "arrowleft":
-            rotationY -= rotationSpeed;
-            break;
-          case "arrowright":
-            rotationY += rotationSpeed;
-            break;
-          */
-
           default:
             break;
         }
@@ -212,6 +201,19 @@ export class AppComponent {
       
       this.player.bearing.y += rotationY;
       this.player.updateObjectBearing();
+
+
+      //we can check if the player's y coordinate is <-10, if so then you know they have fallen off the edge and you can just restart the page and say they died
+      if (this.player.cBody.position.y < -10)
+      {
+        console.log("you died, respawn");
+        const randomX = Math.floor((Math.random() * 40) + 1) - 40; //-40 -> -40 RANDOM SPAWN
+        const randomZ = Math.floor((Math.random() * 40) + 1) - 40;
+        this.player.cBody.position.x = randomX;
+        this.player.cBody.position.y = 15;
+        this.player.cBody.position.z = randomZ;
+        this.player.cBody.velocity.set(0, 0, 0);
+      }
 
 
       //add other players:
@@ -298,24 +300,6 @@ export class AppComponent {
 
     //then we just add these players like usual in the animation loop
   }
-  lookForImpluse() //setting up a listener to look for an impluse
-  {
-    const dbRef = ref(this.db, "players/" + this.deviceID + "/currentImpluse");
-    onValue(dbRef, (snapshot) => {
-      const impluse = snapshot.val();
-
-      if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
-
-      //apply the impluse and then delete current impluse
-      const multiplier = 30;
-      const cannonImpluse = new CANNON.Vec3(impluse.x * multiplier, impluse.y * multiplier, impluse.z * multiplier);
-      this.player.cBody.applyLocalImpulse(cannonImpluse);
-
-      //delete:
-      remove(dbRef);
-
-    });
-  }
 
 
   syncCameraToPlayer()
@@ -345,18 +329,9 @@ export class AppComponent {
     raycaster.setFromCamera({x: pointerX, y: pointerY}, this.camera);
 
     const intersects = raycaster.intersectObjects(this.scene.children);
-    if (intersects.length < 2) { return; }
-  
     let destinationPoint = new THREE.Vector3(); //the raycaster returns 2 values when you click a point, Im not sure why
-
     if (intersects.length == 0) { return; }
     else { destinationPoint = intersects[0].point }
-
-    /*
-    if (intersects[1].object.name == "plane") { destinationPoint = intersects[1].point }
-    else if (intersects[0].object.name == "plane") { destinationPoint = intersects[0].point }
-    else { return }
-    */
 
     //now we need to shoot from the player to the point
     const shotVector = {x: destinationPoint.x - this.player.tBody.position.x, y: destinationPoint.y - this.player.tBody.position.y, z: destinationPoint.z - this.player.tBody.position.z}
@@ -397,7 +372,6 @@ export class AppComponent {
 
     });
   }
-
   projectile(radius: number, shotVector: {x: number, y: number, z: number}) //just the animation for the shot
   {
     const promise = new Promise((resolve, reject) => {
@@ -428,6 +402,23 @@ export class AppComponent {
     })
     return promise;
   }
+  lookForImpluse() //setting up a listener to look for an impluse
+  {
+    const dbRef = ref(this.db, "players/" + this.deviceID + "/currentImpluse");
+    onValue(dbRef, (snapshot) => {
+      const impluse = snapshot.val();
+
+      if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
+
+      //apply the impluse and then delete current impluse
+      const multiplier = 10;
+      const cannonImpluse = new CANNON.Vec3(impluse.x * multiplier, impluse.y * multiplier, impluse.z * multiplier);
+      this.player.cBody.applyLocalImpulse(cannonImpluse);
+
+      //delete:
+      remove(dbRef);
+    });
+  }
 
   keysDown: string[] = []
   startMovementListeners()
@@ -436,27 +427,18 @@ export class AppComponent {
     {  
       if ($e.key == "q") ////press q to stop the mouse from affecting movement
       { this.togglePointerLock(); return; }
-
       if (this.keysDown.includes($e.key) == false) this.keysDown.push($e.key);
     }
     
     document.onkeyup = ($e) =>
-    { 
-      this.keysDown.splice(this.keysDown.indexOf($e.key), 1);
-    }
+    {  this.keysDown.splice(this.keysDown.indexOf($e.key), 1); }
 
     //also look for moues movement here which will control the player's rotation 
     document.onmousemove = ($e) =>
     {
       const rotationY = $e.movementX / 5;
-      //const screenPercentage = ($e.clientX / window.innerWidth) - 0.5; //use the entire screen for movement
-      //const rotationY = 360 * screenPercentage; //convert into a rotation
-
       if (this.pointerLock == true)
-      {
-        this.player.bearing.y += rotationY;
-        this.player.updateObjectBearing();
-      }
+      { this.player.bearing.y += rotationY; this.player.updateObjectBearing(); }
     }
 
     document.onmousedown = ($e) =>
