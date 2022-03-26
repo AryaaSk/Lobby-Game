@@ -3,8 +3,9 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import CannonDebugRenderer from 'src/assets/cannonDebugRenderer';
 
-import { box  } from 'src/assets/objectHelperClasses';
+import { box } from 'src/assets/objectHelperClasses';
 import { Database, ref, set, onValue} from '@angular/fire/database';
+import { remove } from '@firebase/database';
 
 @Component({
   selector: 'app-root',
@@ -32,9 +33,26 @@ export class AppComponent {
   { this.renderer.render(this.scene, this.camera); };
 
   deviceID = 100;
+
+  pointerLock = false;
+  togglePointerLock()
+  {
+    if (this.pointerLock == true)
+    {
+      this.pointerLock = false;
+      document.exitPointerLock();
+    }
+    else
+    {
+      this.pointerLock = true;
+      document.body.requestPointerLock();
+    }
+  }
+
   ngAfterViewInit()
   {
-    document.body.addEventListener( 'click', function () { document.body.requestPointerLock(); }, false ); //lock mouse on screen when game starts
+    document.body.addEventListener( 'click', () => { document.body.requestPointerLock(); this.pointerLock = true; }, {once : true} ); //lock mouse on screen when game starts
+    console.log("Click Q to toggle shoot mode")
 
     //check if there is already a deviceID in localStorage
     if (localStorage.getItem("id") == undefined)
@@ -71,12 +89,13 @@ export class AppComponent {
     pointLight.shadow.mapSize.height = 1024;
     this.scene.add(pointLight);
 
-    this.world.gravity.set(0, -20, 0)
+    this.world.gravity.set(0, -100, 0)
 
 
     //Create Objects:
     this.plane.createObject(this.scene, this.world, { width: 100, height: 10, depth: 100 }, 0x0b7d2d, 0);
     this.plane.tBody.receiveShadow = true;
+    this.plane.tBody.name = "plane";
     this.plane.cBody.material = new CANNON.Material( { friction: 0.0 } );
 
     this.block1.createObject(this.scene, this.world, {width: 5, height: 5, depth: 5}, 0x0000FF, 100000);
@@ -92,10 +111,9 @@ export class AppComponent {
     const playerHeight = 7;
     const playerDepth = 5;
 
-
     this.player.createObject(this.scene, this.world, { width: playerWidth, height: playerHeight, depth: playerDepth }, 0xFF0000, undefined, undefined, undefined);
-    const randomX = Math.floor((Math.random() * 5) + 1) - 5; //-5 -> 5 RANDOM SPAWN
-    const randomZ = Math.floor((Math.random() * 5) + 1) - 5;
+    const randomX = Math.floor((Math.random() * 40) + 1) - 40; //-40 -> -40 RANDOM SPAWN
+    const randomZ = Math.floor((Math.random() * 40) + 1) - 40;
     this.player.tBody.position.x = randomX;
     this.player.tBody.position.y = 15;
     this.player.tBody.position.z = randomZ;
@@ -103,6 +121,7 @@ export class AppComponent {
     this.player.tBody.receiveShadow = true;
     this.player.tBody.castShadow = true;
     this.player.cBody.angularDamping = 1; //rotation lock
+    this.player.cBody.linearDamping = 0.999; //we removed the friction but we still want an abrupt stop and start
     this.player.cBody.material = this.noFrictionMaterial;
 
     this.otherObjects.push(this.plane.cBody);
@@ -126,7 +145,7 @@ export class AppComponent {
 
       //calculate the overall force, rather than individually applying the forces, then just apply the overally force after each run of the switch statement
       const speed = 40; 
-      const jumpHeight = 15;
+      const jumpHeight = 80; //had to multiply by 5 since i increased gravity by 5
       const rotationSpeed = 3;
 
       let movementVector = new CANNON.Vec3(0, 0, 0);
@@ -178,7 +197,7 @@ export class AppComponent {
       }
 
       //don't want the force to add up and become exponential, so i created this which checks the current speed, then only adds the required amount
-      this.player.cBody.velocity = new CANNON.Vec3(0, this.player.cBody.velocity.y, 0);
+      //this.player.cBody.velocity = new CANNON.Vec3(0, this.player.cBody.velocity.y, 0);
       const currentVelocity = this.player.cBody.velocity;
       const currentSpeed = Math.sqrt(currentVelocity.x**2 + currentVelocity.z**2);
       const appliedForce = Math.abs(speed - currentSpeed); //to keep it at a stable 30 (not currently needed since I reset the speed before each movement)
@@ -209,7 +228,7 @@ export class AppComponent {
             const newPlayer = new box();
             newPlayer.id = deviceID;
 
-            newPlayer.createObject(this.scene, this.world, {width: 5, height: 7, depth: 5}, 0xFF00FF, 0); //set mass to 10000 so that the other players cannot be moved by the first player
+            newPlayer.createObject(this.scene, this.world, {width: 5, height: 7, depth: 5}, 0xFF00FF, 0); //mass is 0 so the players aren't affected by gravity
             newPlayer.cBody.angularDamping = 1;
             newPlayer.tBody.receiveShadow = true;
             newPlayer.tBody.castShadow = true;
@@ -247,12 +266,12 @@ export class AppComponent {
 
       this.block1.updateTHREEPosition();
 
-      this.cannonDebugRenderer.update();
+      //this.cannonDebugRenderer.update();
       this.render();
     }, 16);
   }
 
-  otherPlayersObjects: {[k: number] : {deviceID: number, position: {x: number, y: number, z: number}, rotation: {x: number, y: number, z: number}}} = {}
+  otherPlayersObjects: {[k: number] : {deviceID: number, position: {x: number, y: number, z: number}, rotation: {x: number, y: number, z: number}, currentImpluse: {x: number, y: number, z: number}}} = {}
   otherPlayersRendered: {[k: number] : box} = {}; //contains all the players which are currently rendered
   startDataLoop() 
   {
@@ -260,7 +279,7 @@ export class AppComponent {
     //This loop should be around 1 per second, it just creates the upload object then uploads it to firebase
     //It also gets other people's data, and downloads them here
 
-    const dbRefUpload = ref(this.db, "players/" + this.deviceID);
+    const dbRefUpload = ref(this.db, "players/" + this.deviceID + "/data");
     const dbRefDownload = ref(this.db, "players");
 
     setInterval(() => {
@@ -273,10 +292,29 @@ export class AppComponent {
     onValue(dbRefDownload, (snapshot) => {
       const playerData = snapshot.val()
       for (let key in playerData)
-      { this.otherPlayersObjects[playerData[key].deviceID] = playerData[key]}
+      {  this.otherPlayersObjects[playerData[key].data.deviceID] = playerData[key].data; }
     });
+    this.lookForImpluse();
 
     //then we just add these players like usual in the animation loop
+  }
+  lookForImpluse() //setting up a listener to look for an impluse
+  {
+    const dbRef = ref(this.db, "players/" + this.deviceID + "/currentImpluse");
+    onValue(dbRef, (snapshot) => {
+      const impluse = snapshot.val();
+
+      if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
+
+      //apply the impluse and then delete current impluse
+      const multiplier = 30;
+      const cannonImpluse = new CANNON.Vec3(impluse.x * multiplier, impluse.y * multiplier, impluse.z * multiplier);
+      this.player.cBody.applyLocalImpulse(cannonImpluse);
+
+      //delete:
+      remove(dbRef);
+
+    });
   }
 
 
@@ -292,32 +330,118 @@ export class AppComponent {
 
     //position exactly where player is, then move backwards by distance
     this.camera.position.set(this.player.tBody.position.x, setY, this.player.tBody.position.z);
-
     this.camera.translateZ(distance);
+  }
 
-    //need to use trignometry to calculate the offsetX and offsetZ values
-    const offsetX = Math.sin(this.toRadians(30)) * 30;
-    const offsetZ = Math.tan(this.toRadians(30)) * 30;
+  shoot($e: MouseEvent)
+  {
+    if (this.pointerLock == true) //only register click when pointer lock is disabled
+    { return; }
 
-    //this.camera.position.set(this.player.tBody.position.x + offsetX, setY, this.player.tBody.position.z + offsetZ);
+    const raycaster = new THREE.Raycaster();
+    const pointerX = ( $e.clientX / window.innerWidth ) * 2 - 1; 
+    const pointerY = - ( $e.clientY / window.innerHeight ) * 2 + 1;    
+
+    raycaster.setFromCamera({x: pointerX, y: pointerY}, this.camera);
+
+    const intersects = raycaster.intersectObjects(this.scene.children);
+    if (intersects.length < 2) { return; }
+  
+    let destinationPoint = new THREE.Vector3(); //the raycaster returns 2 values when you click a point, Im not sure why
+
+    if (intersects.length == 0) { return; }
+    else { destinationPoint = intersects[0].point }
+
+    /*
+    if (intersects[1].object.name == "plane") { destinationPoint = intersects[1].point }
+    else if (intersects[0].object.name == "plane") { destinationPoint = intersects[0].point }
+    else { return }
+    */
+
+    //now we need to shoot from the player to the point
+    const shotVector = {x: destinationPoint.x - this.player.tBody.position.x, y: destinationPoint.y - this.player.tBody.position.y, z: destinationPoint.z - this.player.tBody.position.z}
+    this.projectile(1, shotVector).then(() => {
+
+      //once the animation has finished, we need to check which players are inside the blast radius
+      const blastRadius = 10;
+
+      const blastRadiusGeo = new THREE.SphereGeometry(blastRadius);
+      const blastRadiusMat = new THREE.MeshStandardMaterial( { color: 0xFFFFFF } )
+      const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
+      blastRadiusObject.position.set(destinationPoint.x, destinationPoint.y, destinationPoint.z);
+      this.scene.add(blastRadiusObject);
+
+      //we can just use the intersects function to check
+      const blastRadiusBB = new THREE.Box3().setFromObject(blastRadiusObject);
+      
+      //we need to check for every player, we can use the otherPlayersRendered dictionary
+      for (let key in this.otherPlayersRendered)
+      {
+        const player = this.otherPlayersRendered[key];
+        const playerBB = new THREE.Box3().setFromObject(player.tBody);
+        
+        if (blastRadiusBB.intersectsBox(playerBB))
+        {
+          //now we need to apply a vector to the other player, and also set the currentForce property in the player's database to that
+
+          //calculte vector from destinationPoint to the playersPosition
+          const playerKnockbackVector = {x: player.cBody.position.x - destinationPoint.x, y: player.cBody.position.y - destinationPoint.y, z: player.cBody.position.z - destinationPoint.z};
+
+          //set the currentImpluse of the player to this value in firebase
+          const dbRef = ref(this.db, "players/" + key + "/currentImpluse");
+          set(dbRef, playerKnockbackVector)
+        }
+      }
+
+      this.scene.remove(blastRadiusObject);
+
+    });
+  }
+
+  projectile(radius: number, shotVector: {x: number, y: number, z: number}) //just the animation for the shot
+  {
+    const promise = new Promise((resolve, reject) => {
+      //create new object at shotVector (no need for actual physics, we will just move the projectile in a certain direction)
+      const projectileGeo = new THREE.SphereGeometry(radius);
+      const projectileMat = new THREE.MeshStandardMaterial( { color: 0xFFFF00 } )
+      const projectile = new THREE.Mesh(projectileGeo, projectileMat);
+      projectile.position.set(this.player.tBody.position.x, this.player.tBody.position.y, this.player.tBody.position.z);
+      this.scene.add(projectile);
+
+      //repeat the loop 100 times to shoot the projectile
+      
+
+      const intervals = Math.sqrt(shotVector.x**2 + shotVector.z**2)
+      const xIncrements = shotVector.x / intervals;
+      const yInccrements = shotVector.y / intervals;
+      const zIncrements = shotVector.z / intervals;
+      let counter = 0;
+      const interval = setInterval(() => {
+        if (counter >= intervals) { clearInterval(interval); setTimeout(() => {this.scene.remove(projectile);}, 100); resolve("Finish animation"); } //once animation has finished remove it
+
+        projectile.translateX(xIncrements);
+        projectile.translateY(yInccrements);
+        projectile.translateZ(zIncrements);
+
+        counter += 1;
+      }, 0.1);
+    })
+    return promise;
   }
 
   keysDown: string[] = []
-  qPressed = false; //press q to stop the mouse from affecting movement
   startMovementListeners()
   {
     document.onkeydown = ($e) =>  //so there is only ever 1 key of 1 type in the array
     {  
-      if ($e.key == "q") //tab doesnt need to be handled in the main game loop
-      { document.exitPointerLock(); this.qPressed = true; return; }
+      if ($e.key == "q") ////press q to stop the mouse from affecting movement
+      { this.togglePointerLock(); return; }
 
       if (this.keysDown.includes($e.key) == false) this.keysDown.push($e.key);
     }
+    
     document.onkeyup = ($e) =>
     { 
-      if ($e.key == "q")
-      { document.body.requestPointerLock(); this.qPressed = false; return;}
-
       this.keysDown.splice(this.keysDown.indexOf($e.key), 1);
     }
 
@@ -328,12 +452,15 @@ export class AppComponent {
       //const screenPercentage = ($e.clientX / window.innerWidth) - 0.5; //use the entire screen for movement
       //const rotationY = 360 * screenPercentage; //convert into a rotation
 
-      if (this.qPressed == false)
+      if (this.pointerLock == true)
       {
         this.player.bearing.y += rotationY;
         this.player.updateObjectBearing();
       }
     }
+
+    document.onmousedown = ($e) =>
+    { this.shoot($e); }
   }
 
   toRadians(angle: number) {
