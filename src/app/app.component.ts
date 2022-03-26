@@ -339,7 +339,7 @@ export class AppComponent {
     setInterval(() => {
       const uploadData = {deviceID: this.playerInfo.deviceID, position: {x: this.player.cBody.position.x, y: this.player.cBody.position.y, z: this.player.cBody.position.z}, rotation: {x: this.player.bearing.x, y: this.player.bearing.y, z: this.player.bearing.z}};
       set(dbRefUpload, uploadData);
-    }, 50)
+    }, 32)
 
     //get all data from the firebase using realtime listener, then check if the deviceID is not the same as ours
     //add all the other data to a list of otherPlayers, then refresh that list as well
