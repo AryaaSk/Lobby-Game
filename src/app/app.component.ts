@@ -34,18 +34,22 @@ export class AppComponent {
 
 
   //CONSTANTS:
-  settings = {
+  playerInfo = {
     dimensions: {width: 5, height: 7, depth: 5},
     speed: 40,
     jumpHeight: 30,
 
-    camera: {setY: 20, distance: 30}
+    camera: {setY: 20, distance: 30},
+
+    deviceID: 100,
+    colour: 0xFF0000,
+    name: ""
   };
 
 
-  //DYNAMIC CONSTANTS:
-  deviceID = 100;
+  //VARIABLES:
   pointerLock = false;
+  popupText = "";
   otherPlayersObjects: {[k: number] : {deviceID: number, position: {x: number, y: number, z: number}, rotation: {x: number, y: number, z: number}, currentImpluse: {x: number, y: number, z: number}}} = {}
   otherPlayersRendered: {[k: number] : box} = {}; //contains all the players which are currently rendered
 
@@ -65,6 +69,8 @@ export class AppComponent {
     this.startAnimationLoop();
     this.startMovementListeners();
     this.startDataLoop();
+
+    this.popup("Press Q to toggle shoot mode", 2000);
   } 
 
 
@@ -88,8 +94,16 @@ export class AppComponent {
   {
     const cameraRotationY = -this.player.bearing.y; this.camera.rotation.y = this.toRadians(cameraRotationY); //we also want to match the camera to the player's bearing.y
     //position exactly where player is, then move backwards by distance
-    this.camera.position.set(this.player.tBody.position.x, this.settings.camera.setY, this.player.tBody.position.z);
-    this.camera.translateZ(this.settings.camera.distance);
+    this.camera.position.set(this.player.tBody.position.x, this.playerInfo.camera.setY, this.player.tBody.position.z);
+    this.camera.translateZ(this.playerInfo.camera.distance);
+  }
+  popup(text: string, time: number)
+  {
+    this.popupText = text;
+    document.getElementById("popupText")!.style.opacity = "100%"
+    setTimeout(() => {
+      document.getElementById("popupText")!.style.opacity = "0%"
+    }, time);
   }
 
 
@@ -101,16 +115,16 @@ export class AppComponent {
   worldSetup()
   {
     document.body.addEventListener( 'click', () => { document.body.requestPointerLock(); this.pointerLock = true; }, {once : true} ); //lock mouse on screen when game starts
-    console.log("Click Q to toggle shoot mode")
 
     //check if there is already a deviceID in localStorage
     if (localStorage.getItem("id") == undefined)
     {
       const randomID = Math.floor(Math.random() * (9999999999999999 - 1000000000000000 + 1) + 1000000000000000); //random number statistically almost guarnteed to be unique 
-      this.deviceID = randomID; localStorage.setItem("id", String(randomID));
+      this.playerInfo.deviceID = randomID; localStorage.setItem("id", String(randomID));
     }
     else
-    { this.deviceID = Number(localStorage.getItem("id")!); }
+    { this.playerInfo.deviceID = Number(localStorage.getItem("id")!); }
+
 
     this.renderer = new THREE.WebGLRenderer({ //renderer setup
       canvas: document.getElementById("renderingWindow")!
@@ -155,11 +169,11 @@ export class AppComponent {
     this.otherObjects.push(this.plane.cBody);
     this.otherObjects.push(this.block1.cBody);
 
-    this.player.createObject(this.scene, this.world, { width: this.settings.dimensions.width, height: this.settings.dimensions.height, depth: this.settings.dimensions.depth }, 0xFF0000, undefined, undefined, undefined);
+    this.player.createObject(this.scene, this.world, { width: this.playerInfo.dimensions.width, height: this.playerInfo.dimensions.height, depth: this.playerInfo.dimensions.depth }, this.playerInfo.colour, undefined, undefined, undefined);
     this.player.tBody.receiveShadow = true;
     this.player.tBody.castShadow = true;
     this.player.cBody.angularDamping = 1; //rotation lock
-    this.player.cBody.linearDamping = 0.9; //we removed the friction but we still want an abrupt stop and start
+    this.player.cBody.linearDamping = 0.95; //we removed the friction but we still want an abrupt stop and start
     this.player.cBody.material = this.noFrictionMaterial;
   }
   spawnPlayer()
@@ -231,13 +245,13 @@ export class AppComponent {
       //this.player.cBody.velocity = new CANNON.Vec3(0, this.player.cBody.velocity.y, 0);
       const currentVelocity = this.player.cBody.velocity;
       const currentSpeed = Math.sqrt(currentVelocity.x**2 + currentVelocity.z**2);
-      const appliedForce = Math.abs(this.settings.speed - currentSpeed); //to keep it at a stable 30 (not currently needed since I reset the speed before each movement)
+      const appliedForce = Math.abs(this.playerInfo.speed - currentSpeed); //to keep it at a stable 30 (not currently needed since I reset the speed before each movement)
 
       const yVelocity = Math.abs(currentVelocity.y); //check velocity in y-axis, if it is >1 then don't allow another jump, since it could cause jump stacking
       if (yVelocity > 1)
       { movementVector.y = 0; }
 
-      const impluseVector = new CANNON.Vec3(appliedForce * movementVector.x, this.settings.jumpHeight * movementVector.y, appliedForce * movementVector.z); 
+      const impluseVector = new CANNON.Vec3(appliedForce * movementVector.x, this.playerInfo.jumpHeight * movementVector.y, appliedForce * movementVector.z); 
       this.player.cBody.applyLocalImpulse(impluseVector);
       this.player.cBody.quaternion.normalize();
       
@@ -247,7 +261,7 @@ export class AppComponent {
       //we can check if the player's y coordinate is <-10, if so then you know they have fallen off the edge and you can just restart the page and say they died
       if (this.player.cBody.position.y < -10)
       {
-        console.log("You have died, you will now respawn");
+        this.popup("You died...", 2000);
         this.spawnPlayer();
       }
 
@@ -257,7 +271,7 @@ export class AppComponent {
         const player = this.otherPlayersObjects[key];
         const deviceID = player.deviceID;
 
-        if (deviceID != this.deviceID) //if the deviceID is ours then we don't want to render a new object for ourselves
+        if (deviceID != this.playerInfo.deviceID) //if the deviceID is ours then we don't want to render a new object for ourselves
         {
           //check if this deviceID exists in the threejs scene
           if (this.scene.getObjectByName(String(deviceID)) == undefined)
@@ -304,17 +318,19 @@ export class AppComponent {
       this.render();
     }, 16);
   }
+
+  //Server and Database
   startDataLoop() 
   {
     //I can't upload everytime in the main animation loop, since it would be too often
     //This loop should be around 1 per second, it just creates the upload object then uploads it to firebase
     //It also gets other people's data, and downloads them here
 
-    const dbRefUpload = ref(this.db, "players/" + this.deviceID + "/data");
+    const dbRefUpload = ref(this.db, "players/" + this.playerInfo.deviceID + "/data");
     const dbRefDownload = ref(this.db, "players");
 
     setInterval(() => {
-      const uploadData = {deviceID: this.deviceID, position: {x: this.player.cBody.position.x, y: this.player.cBody.position.y, z: this.player.cBody.position.z}, rotation: {x: this.player.bearing.x, y: this.player.bearing.y, z: this.player.bearing.z}};
+      const uploadData = {deviceID: this.playerInfo.deviceID, position: {x: this.player.cBody.position.x, y: this.player.cBody.position.y, z: this.player.cBody.position.z}, rotation: {x: this.player.bearing.x, y: this.player.bearing.y, z: this.player.bearing.z}};
       set(dbRefUpload, uploadData);
     }, 50)
 
@@ -329,10 +345,36 @@ export class AppComponent {
 
     //then we just add these players like usual during the animation loop
   }
+  lookForImpluse() //setting up a listener to look for an impluse
+  {
+    const dbRef = ref(this.db, "players/" + this.playerInfo.deviceID + "/currentImpluse");
+    onValue(dbRef, (snapshot) => {
+      const impluse = snapshot.val();
 
+      if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
 
+      //apply the impluse and then delete current impluse
+      const multiplier = 10;
+      const cannonImpluse = new CANNON.Vec3(impluse.x * multiplier, impluse.y * multiplier, impluse.z * multiplier);
+      this.player.cBody.applyLocalImpulse(cannonImpluse);
 
+      //delete:
+      remove(dbRef);
+    });
+  }
+  resetServer() //this is for when there are too many people playing at the same time
+  {
+    const password = "nothing123";
+    const userPassword = prompt("Please enter the password to reset the server");
 
+    if (userPassword == password)
+    {
+      const playersRef = ref(this.db, "players");
+      remove(playersRef);
+    }
+    else
+    { this.popup("Invalid password", 500); }
+  }
 
 
 
@@ -417,23 +459,6 @@ export class AppComponent {
       }, 0.1);
     })
     return promise;
-  }
-  lookForImpluse() //setting up a listener to look for an impluse
-  {
-    const dbRef = ref(this.db, "players/" + this.deviceID + "/currentImpluse");
-    onValue(dbRef, (snapshot) => {
-      const impluse = snapshot.val();
-
-      if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
-
-      //apply the impluse and then delete current impluse
-      const multiplier = 10;
-      const cannonImpluse = new CANNON.Vec3(impluse.x * multiplier, impluse.y * multiplier, impluse.z * multiplier);
-      this.player.cBody.applyLocalImpulse(cannonImpluse);
-
-      //delete:
-      remove(dbRef);
-    });
   }
 
 
