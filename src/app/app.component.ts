@@ -254,6 +254,13 @@ export class AppComponent {
       const impluseVector = new CANNON.Vec3(appliedForce * movementVector.x, this.playerInfo.jumpHeight * movementVector.y, appliedForce * movementVector.z); 
       this.player.cBody.applyLocalImpulse(impluseVector);
       this.player.cBody.quaternion.normalize();
+
+      //going to also apply a speed limit in each axis
+      const speedLimit = 100;
+      if (this.player.cBody.velocity.x >= speedLimit) { this.player.cBody.velocity.x = speedLimit; }
+      if (this.player.cBody.velocity.x <= -speedLimit) { this.player.cBody.velocity.x = -speedLimit; }
+      if (this.player.cBody.velocity.z >= speedLimit) { this.player.cBody.velocity.z = speedLimit; }
+      if (this.player.cBody.velocity.z <= -speedLimit) { this.player.cBody.velocity.z = -speedLimit; }
       
       this.player.bearing.y += rotationY;
       this.player.updateObjectBearing();
@@ -268,7 +275,7 @@ export class AppComponent {
       //add other players:
       for (let key in this.otherPlayersObjects)
       {
-        const player = this.otherPlayersObjects[key];
+        const player = this.otherPlayersObjects[Number(key)];
         const deviceID = player.deviceID;
 
         if (deviceID != this.playerInfo.deviceID) //if the deviceID is ours then we don't want to render a new object for ourselves
@@ -339,28 +346,14 @@ export class AppComponent {
     onValue(dbRefDownload, (snapshot) => {
       const playerData = snapshot.val()
       for (let key in playerData)
-      {  this.otherPlayersObjects[playerData[key].data.deviceID] = playerData[key].data; }
+      {
+        this.otherPlayersObjects[Number(key)] = playerData[key].data;
+        //this.otherPlayersObjects[playerData[key].data.deviceID] = playerData[key].data;
+      }
     });
     this.lookForImpluse();
 
     //then we just add these players like usual during the animation loop
-  }
-  lookForImpluse() //setting up a listener to look for an impluse
-  {
-    const dbRef = ref(this.db, "players/" + this.playerInfo.deviceID + "/currentImpluse");
-    onValue(dbRef, (snapshot) => {
-      const impluse = snapshot.val();
-
-      if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
-
-      //apply the impluse and then delete current impluse
-      const multiplier = 10;
-      const cannonImpluse = new CANNON.Vec3(impluse.x * multiplier, impluse.y * multiplier, impluse.z * multiplier);
-      this.player.cBody.applyLocalImpulse(cannonImpluse);
-
-      //delete:
-      remove(dbRef);
-    });
   }
   resetServer() //this is for when there are too many people playing at the same time
   {
@@ -371,6 +364,7 @@ export class AppComponent {
     {
       const playersRef = ref(this.db, "players");
       remove(playersRef);
+      location.reload();
     }
     else
     { this.popup("Invalid password", 500); }
@@ -459,6 +453,23 @@ export class AppComponent {
       }, 0.1);
     })
     return promise;
+  }
+  lookForImpluse() //setting up a listener to look for an impluse
+  {
+    const dbRef = ref(this.db, "players/" + this.playerInfo.deviceID + "/currentImpluse");
+    onValue(dbRef, (snapshot) => {
+      const impluse = snapshot.val();
+
+      if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
+
+      //apply the impluse and then delete current impluse
+      const multiplier = 10;
+      const cannonImpluse = new CANNON.Vec3((impluse.x * multiplier), impluse.y * multiplier, (impluse.z * multiplier));
+      this.player.cBody.applyImpulse(cannonImpluse);
+
+      //delete:
+      remove(dbRef);
+    });
   }
 
 
