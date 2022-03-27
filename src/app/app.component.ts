@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import CannonDebugRenderer from 'src/assets/cannonDebugRenderer';
 
-import { box } from 'src/assets/objectHelperClasses';
+import { box, sphere } from 'src/assets/objectHelperClasses';
 import { Database, ref, set, onValue} from '@angular/fire/database';
 import { remove } from '@firebase/database';
 
@@ -41,17 +41,30 @@ export class AppComponent {
 
     camera: {setY: 20, distance: 30},
 
-    deviceID: 100,
+    deviceID: 100, //will be assigned when the program starts (100 is just a placeholder)
     colour: 0xFF0000,
     name: ""
   };
+
+  mainRefreshRate = 33; //refresh every 16ms (60fps)
+  uploadRefreshRate = 33; //30fps
+
+  impulseRadius = 1;
 
 
   //VARIABLES:
   pointerLock = false;
   popupText = "";
-  otherPlayersObjects: {[k: number] : {deviceID: number, position: {x: number, y: number, z: number}, rotation: {x: number, y: number, z: number}, currentImpluse: {x: number, y: number, z: number}}} = {}
-  otherPlayersRendered: {[k: number] : box} = {}; //contains all the players which are currently rendered
+  otherPlayersObjects: {[k: number] : {
+    deviceID: number, 
+    movementData: {
+      position: {x: number, y: number, z: number},
+      rotation: {x: number, y: number, z: number}
+  }}} = {};
+  otherPlayersRendered: { [k: number] : box } = {}; //contains all the players which are currently rendered
+
+  sceneImpulses: { [k: number] : {x: number, y: number, z: number} } = {};
+  renderedImpulses: string[] = []; //keeps track of which impulses have been rendered
 
 
 
@@ -178,8 +191,8 @@ export class AppComponent {
   }
   spawnPlayer()
   {
-    const randomX = Math.floor((Math.random() * 40) + 1) - 40; //-40 -> -40 RANDOM SPAWN
-    const randomZ = Math.floor((Math.random() * 40) + 1) - 40;
+    const randomX = Math.floor((Math.random() * 90) + 1) - 45; //-45 -> -45 RANDOM SPAWN
+    const randomZ = Math.floor((Math.random() * 90) + 1) - 45;
     this.player.cBody.position.x = randomX;
     this.player.cBody.position.y = 15;
     this.player.cBody.position.z = randomZ;
@@ -300,19 +313,60 @@ export class AppComponent {
             //if it does exist then it will be in the otherPlayersRendered dictionary
             const currentPlayer = this.otherPlayersRendered[deviceID];
         
-            currentPlayer.cBody.position.x = player.position.x;
-            currentPlayer.cBody.position.y = player.position.y;
-            currentPlayer.cBody.position.z = player.position.z;
+            currentPlayer.cBody.position.x = player.movementData.position.x;
+            currentPlayer.cBody.position.y = player.movementData.position.y;
+            currentPlayer.cBody.position.z = player.movementData.position.z;
 
-            currentPlayer.bearing.x = player.rotation.x;
-            currentPlayer.bearing.y = player.rotation.y;
-            currentPlayer.bearing.z = player.rotation.z;
+            currentPlayer.bearing.x = player.movementData.rotation.x;
+            currentPlayer.bearing.y = player.movementData.rotation.y;
+            currentPlayer.bearing.z = player.movementData.rotation.z;
             currentPlayer.updateObjectBearing();
 
             currentPlayer.updateTHREEPosition();
           }
         }
       }
+
+      //render the sceneImpulses as well:
+      for (let impulseID in this.sceneImpulses)
+      {
+        const impulse = this.sceneImpulses[impulseID]
+        this.renderedImpulses.push(impulseID);
+
+        //need to create an impulse three object, then just update it
+        if (this.scene.getObjectByName(impulseID) == undefined)
+        {
+          const projectileGeo = new THREE.SphereGeometry(this.impulseRadius);
+          const projectileMat = new THREE.MeshBasicMaterial( { color: 0xFFFF00 } )
+          const projectile = new THREE.Mesh(projectileGeo, projectileMat);
+          projectile.position.set(impulse.x, impulse.y, impulse.z);
+          projectile.name = impulseID;
+          this.scene.add(projectile);
+        }
+        else
+        {
+          //we can access it from this.scene.getObjectByName(impulseID)
+          const projectile = this.scene.getObjectByName(impulseID)!;
+          projectile.position.set(impulse.x, impulse.y, impulse.z);
+        }
+      }
+
+      //Check which ids are in the rendered impulses, but not in the sceneImpulses, those are the impulses which need to be removed from the scene
+      i = 0;
+      while (i != this.renderedImpulses.length)
+      {
+        const impulseID = this.renderedImpulses[i];
+        if (this.sceneImpulses[Number(impulseID)] == undefined)
+        {
+          this.scene.remove(this.scene.getObjectByName(impulseID)!)
+          this.renderedImpulses.splice(i, 1);
+        }
+        else
+        {
+          i += 1;
+        }
+      }
+
 
       //step world and update object positions:
       this.world.step(deltaTime / 1000);
@@ -323,7 +377,7 @@ export class AppComponent {
 
       //this.cannonDebugRenderer.update();
       this.render();
-    }, 16);
+    }, this.mainRefreshRate);
   }
 
   //Server and Database
@@ -333,25 +387,34 @@ export class AppComponent {
     //This loop should be around 1 per second, it just creates the upload object then uploads it to firebase
     //It also gets other people's data, and downloads them here
 
-    const dbRefUpload = ref(this.db, "players/" + this.playerInfo.deviceID + "/data");
+    const dbRefUpload = ref(this.db, "players/" + this.playerInfo.deviceID);
     const dbRefDownload = ref(this.db, "players");
 
     setInterval(() => {
-      const uploadData = {deviceID: this.playerInfo.deviceID, position: {x: this.player.cBody.position.x, y: this.player.cBody.position.y, z: this.player.cBody.position.z}, rotation: {x: this.player.bearing.x, y: this.player.bearing.y, z: this.player.bearing.z}};
+
+      const uploadData = {
+        deviceID: this.playerInfo.deviceID, 
+        movementData: {
+          position: {x: this.player.cBody.position.x, y: this.player.cBody.position.y, z: this.player.cBody.position.z},
+          rotation: {x: this.player.bearing.x, y: this.player.bearing.y, z: this.player.bearing.z}
+        }
+      };
       set(dbRefUpload, uploadData);
-    }, 32)
+    }, this.uploadRefreshRate);
 
     //get all data from the firebase using realtime listener, then check if the deviceID is not the same as ours
     //add all the other data to a list of otherPlayers, then refresh that list as well
     onValue(dbRefDownload, (snapshot) => {
       const playerData = snapshot.val()
-      for (let key in playerData)
+      for (let deviceID in playerData)
       {
-        this.otherPlayersObjects[Number(key)] = playerData[key].data;
+        this.otherPlayersObjects[Number(deviceID)] = playerData[deviceID];
         //this.otherPlayersObjects[playerData[key].data.deviceID] = playerData[key].data;
       }
     });
+
     this.lookForImpluse();
+    this.lookForSelfImpluse();
 
     //then we just add these players like usual during the animation loop
   }
@@ -372,7 +435,7 @@ export class AppComponent {
 
 
 
-  //SHOOTING EVENTS:
+  //GAME MECHANICS:
   shoot($e: MouseEvent)
   {
     if (this.pointerLock == true) //only register click when pointer lock is disabled
@@ -391,7 +454,7 @@ export class AppComponent {
 
     //now we need to shoot from the player to the point
     const shotVector = {x: destinationPoint.x - this.player.tBody.position.x, y: destinationPoint.y - this.player.tBody.position.y, z: destinationPoint.z - this.player.tBody.position.z}
-    this.projectile(1, shotVector).then(() => {
+    this.projectile(this.impulseRadius, shotVector).then(() => {
 
       //once the animation has finished, we need to check which players are inside the blast radius
       const blastRadius = 10;
@@ -431,7 +494,7 @@ export class AppComponent {
     const promise = new Promise((resolve, reject) => {
       //create new object at shotVector (no need for actual physics, we will just move the projectile in a certain direction)
       const projectileGeo = new THREE.SphereGeometry(radius);
-      const projectileMat = new THREE.MeshStandardMaterial( { color: 0xFFFF00 } )
+      const projectileMat = new THREE.MeshBasicMaterial( { color: 0xFFFF00 } )
       const projectile = new THREE.Mesh(projectileGeo, projectileMat);
       projectile.position.set(this.player.tBody.position.x, this.player.tBody.position.y, this.player.tBody.position.z);
       this.scene.add(projectile);
@@ -441,20 +504,29 @@ export class AppComponent {
       const xIncrements = shotVector.x / intervals;
       const yInccrements = shotVector.y / intervals;
       const zIncrements = shotVector.z / intervals;
+
+      //when this projectile is travelling we also want to upload the projectiles position
+      const projectileID = Math.floor(Math.random() * (9999999999999999 - 1000000000000000 + 1) + 1000000000000000); //random number statistically almost guarnteed to be unique 
+      const dbRef = ref(this.db, "impluses/" + projectileID);
+
       let counter = 0;
       const interval = setInterval(() => {
-        if (counter >= intervals) { clearInterval(interval); setTimeout(() => {this.scene.remove(projectile);}, 100); resolve("Finish animation"); } //once animation has finished remove it
-
         projectile.translateX(xIncrements);
         projectile.translateY(yInccrements);
         projectile.translateZ(zIncrements);
 
+        //need to upload the absolute values for the projectile to the realtime database
+        set(dbRef, {x: projectile.position.x, y: projectile.position.y, z: projectile.position.z});
+
+        if (counter >= intervals) { clearInterval(interval); setTimeout(() => {this.scene.remove(projectile);}, 100); remove(dbRef); resolve("Finish animation"); } //once animation has finished remove it
         counter += 1;
       }, 0.1);
     })
     return promise;
   }
-  lookForImpluse() //setting up a listener to look for an impluse
+
+  //Listeners:
+  lookForSelfImpluse() //setting up a listener to look for an impluse to the current player body
   {
     const dbRef = ref(this.db, "players/" + this.playerInfo.deviceID + "/currentImpluse");
     onValue(dbRef, (snapshot) => {
@@ -470,6 +542,22 @@ export class AppComponent {
       //delete:
       remove(dbRef);
     });
+  }
+  lookForImpluse() //this will look for impulses everywhere in the scene
+  {
+    const dbRef = ref(this.db, "impluses");
+    onValue(dbRef, (snapshot) => {
+      const data = snapshot.val();
+
+      this.sceneImpulses = {}; //the screenImpulses object is always upto data with the realtime database
+      for (let impulseID in data)
+      {
+        const impulse = data[impulseID];
+        this.sceneImpulses[Number(impulseID)] = impulse; //will then get rendered in the animation loop
+      }
+
+    })
+
   }
 
 
