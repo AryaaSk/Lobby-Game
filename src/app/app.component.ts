@@ -24,7 +24,7 @@ export class AppComponent {
   world = new CANNON.World();
   cannonDebugRenderer = new CannonDebugRenderer( this.scene, this.world );
   plane = new box();
-  block1 = new box();
+  //block1 = new box();
   player = new box();
   otherObjects: CANNON.Body[] = []; //list of all other objects in scene
 
@@ -46,8 +46,8 @@ export class AppComponent {
     name: ""
   };
 
-  mainRefreshRate = 33; //refresh every 16ms (60fps)
-  uploadRefreshRate = 33; //30fps
+  mainRefreshRate = 16; //refresh every 16ms (60fps)
+  uploadRefreshRate = 16; //30fps
 
   impulseRadius = 1;
 
@@ -171,6 +171,7 @@ export class AppComponent {
     this.plane.tBody.name = "plane";
     this.plane.cBody.material = new CANNON.Material( { friction: 0.0 } );
 
+    /*
     this.block1.createObject(this.scene, this.world, {width: 5, height: 5, depth: 5}, 0x0000FF, 100000);
     this.block1.tBody.position.x = -20;
     this.block1.tBody.position.y = 7;
@@ -178,9 +179,10 @@ export class AppComponent {
     this.block1.tBody.receiveShadow = true;
     this.block1.tBody.castShadow = true;
     this.block1.cBody.material = this.noFrictionMaterial;
+    */
 
     this.otherObjects.push(this.plane.cBody);
-    this.otherObjects.push(this.block1.cBody);
+    //this.otherObjects.push(this.block1.cBody);
 
     this.player.createObject(this.scene, this.world, { width: this.playerInfo.dimensions.width, height: this.playerInfo.dimensions.height, depth: this.playerInfo.dimensions.depth }, this.playerInfo.colour, undefined, undefined, undefined);
     this.player.tBody.receiveShadow = true;
@@ -327,6 +329,7 @@ export class AppComponent {
         }
       }
 
+
       //render the sceneImpulses as well:
       for (let impulseID in this.sceneImpulses)
       {
@@ -371,7 +374,7 @@ export class AppComponent {
       //step world and update object positions:
       this.world.step(deltaTime / 1000);
       this.plane.updateTHREEPosition();
-      this.block1.updateTHREEPosition();
+      //this.block1.updateTHREEPosition();
       this.player.updateTHREEPosition();
       this.syncCameraToPlayer();
 
@@ -387,23 +390,25 @@ export class AppComponent {
     //This loop should be around 1 per second, it just creates the upload object then uploads it to firebase
     //It also gets other people's data, and downloads them here
 
-    const dbRefUpload = ref(this.db, "players/" + this.playerInfo.deviceID);
-    const dbRefDownload = ref(this.db, "players");
+    const oneTimeUpload = ref(this.db, "players/" + this.playerInfo.deviceID);
 
+    //upload 1 time data such as deviceID, and in the future colour and name
+    set(oneTimeUpload, { deviceID: this.playerInfo.deviceID });
+
+    const dbRefUpload = ref(this.db, "players/" + this.playerInfo.deviceID + "/movementData");
     setInterval(() => {
 
-      const uploadData = {
-        deviceID: this.playerInfo.deviceID, 
-        movementData: {
-          position: {x: this.player.cBody.position.x, y: this.player.cBody.position.y, z: this.player.cBody.position.z},
-          rotation: {x: this.player.bearing.x, y: this.player.bearing.y, z: this.player.bearing.z}
-        }
+      const movementData = {
+        position: {x: this.player.cBody.position.x, y: this.player.cBody.position.y, z: this.player.cBody.position.z},
+        rotation: {x: this.player.bearing.x, y: this.player.bearing.y, z: this.player.bearing.z}
       };
-      set(dbRefUpload, uploadData);
+      set(dbRefUpload, movementData);
     }, this.uploadRefreshRate);
+
 
     //get all data from the firebase using realtime listener, then check if the deviceID is not the same as ours
     //add all the other data to a list of otherPlayers, then refresh that list as well
+    const dbRefDownload = ref(this.db, "players");
     onValue(dbRefDownload, (snapshot) => {
       const playerData = snapshot.val()
       for (let deviceID in playerData)
@@ -531,8 +536,9 @@ export class AppComponent {
     const dbRef = ref(this.db, "players/" + this.playerInfo.deviceID + "/currentImpluse");
     onValue(dbRef, (snapshot) => {
       const impluse = snapshot.val();
-
       if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
+
+      console.log("applied impulse");
 
       //apply the impluse and then delete current impluse
       const multiplier = 10;
@@ -555,9 +561,7 @@ export class AppComponent {
         const impulse = data[impulseID];
         this.sceneImpulses[Number(impulseID)] = impulse; //will then get rendered in the animation loop
       }
-
     })
-
   }
 
 
