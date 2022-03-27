@@ -36,20 +36,28 @@ export class AppComponent {
   //CONSTANTS:
   playerInfo = {
     dimensions: {width: 5, height: 7, depth: 5},
-    speed: 40,
+    speed: 70,
     jumpHeight: 30,
+    colour: 0xFF0000,
 
     camera: {setY: 20, distance: 30},
 
     deviceID: 100, //will be assigned when the program starts (100 is just a placeholder)
-    colour: 0xFF0000,
     name: ""
   };
 
+  enemyInfo = {
+    colour: 0xFF00FF, 
+    mass: 0 //mass is 0 so the players aren't affected by gravity
+  }
+
+  impulseInfo = {
+    colour: 0xFFFFFF,
+    radius: 1
+  }
+
   mainRefreshRate = 16; //refresh every 16ms (60fps)
   uploadRefreshRate = 16; //30fps
-
-  impulseRadius = 1;
 
 
   //VARIABLES:
@@ -301,7 +309,7 @@ export class AppComponent {
             const newPlayer = new box();
             newPlayer.id = deviceID;
 
-            newPlayer.createObject(this.scene, this.world, {width: 5, height: 7, depth: 5}, 0xFF00FF, 0); //mass is 0 so the players aren't affected by gravity
+            newPlayer.createObject(this.scene, this.world, {width: 5, height: 7, depth: 5}, this.enemyInfo.colour, this.enemyInfo.mass);
             newPlayer.cBody.angularDamping = 1;
             newPlayer.tBody.receiveShadow = true;
             newPlayer.tBody.castShadow = true;
@@ -339,8 +347,8 @@ export class AppComponent {
         //need to create an impulse three object, then just update it
         if (this.scene.getObjectByName(impulseID) == undefined)
         {
-          const projectileGeo = new THREE.SphereGeometry(this.impulseRadius);
-          const projectileMat = new THREE.MeshBasicMaterial( { color: 0xFFFF00 } )
+          const projectileGeo = new THREE.SphereGeometry(this.impulseInfo.radius);
+          const projectileMat = new THREE.MeshBasicMaterial( { color: this.impulseInfo.colour } )
           const projectile = new THREE.Mesh(projectileGeo, projectileMat);
           projectile.position.set(impulse.x, impulse.y, impulse.z);
           projectile.name = impulseID;
@@ -459,7 +467,7 @@ export class AppComponent {
 
     //now we need to shoot from the player to the point
     const shotVector = {x: destinationPoint.x - this.player.tBody.position.x, y: destinationPoint.y - this.player.tBody.position.y, z: destinationPoint.z - this.player.tBody.position.z}
-    this.projectile(this.impulseRadius, shotVector).then(() => {
+    this.projectile(this.impulseInfo.radius, shotVector).then(() => {
 
       //once the animation has finished, we need to check which players are inside the blast radius
       const blastRadius = 10;
@@ -499,7 +507,7 @@ export class AppComponent {
     const promise = new Promise((resolve, reject) => {
       //create new object at shotVector (no need for actual physics, we will just move the projectile in a certain direction)
       const projectileGeo = new THREE.SphereGeometry(radius);
-      const projectileMat = new THREE.MeshBasicMaterial( { color: 0xFFFF00 } )
+      const projectileMat = new THREE.MeshBasicMaterial( { color: this.impulseInfo.colour } )
       const projectile = new THREE.Mesh(projectileGeo, projectileMat);
       projectile.position.set(this.player.tBody.position.x, this.player.tBody.position.y, this.player.tBody.position.z);
       this.scene.add(projectile);
@@ -537,8 +545,6 @@ export class AppComponent {
     onValue(dbRef, (snapshot) => {
       const impluse = snapshot.val();
       if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
-
-      console.log("applied impulse");
 
       //apply the impluse and then delete current impluse
       const multiplier = 10;
