@@ -54,7 +54,7 @@ export class AppComponent {
     radius: 1
   }
 
-  shadowsEnabled = false;
+  shadowsEnabled = true;
   mainRefreshRate = 16; //refresh every 16ms (60fps)
   uploadRefreshRate = 33; //30fps
 
@@ -76,27 +76,8 @@ export class AppComponent {
 
 
 
+ 
 
-  
-  //STARTUP:
-  ngAfterViewInit()
-  {
-    this.worldSetup();
-
-    this.loadObjects();
-    this.spawnPlayer();
-
-    this.startAnimationLoop();
-    this.startMovementListeners();
-    this.startDataLoop();
-
-    this.popup("Press Q to toggle shoot mode", 2000);
-  } 
-
-
-
-
-  
   //Boilerplate Functions:
   render()
   { this.renderer.render(this.scene, this.camera); };
@@ -130,7 +111,26 @@ export class AppComponent {
 
 
 
+  //STARTUP:
+  ngAfterViewInit()
+  {
+    this.worldSetup();
+
+    this.loadObjects();
+    this.spawnPlayer();
+
+    this.startAnimationLoop();
+    this.startMovementListeners();
+    this.startDataLoop();
+
+    this.popup("Press Q to toggle shoot mode", 2000);
+  } 
+
+
+
   
+
+
   //WORLD FUNCTIONS:
   worldSetup()
   {
@@ -138,12 +138,20 @@ export class AppComponent {
 
     //check if there is already a deviceID in localStorage
     if (localStorage.getItem("id") == undefined)
-    {
-      const randomID = Math.floor(Math.random() * (9999999999999999 - 1000000000000000 + 1) + 1000000000000000); //random number statistically almost guarnteed to be unique 
-      this.playerInfo.deviceID = randomID; localStorage.setItem("id", String(randomID));
-    }
-    else
-    { this.playerInfo.deviceID = Number(localStorage.getItem("id")!); }
+    { const randomID = Math.floor(Math.random() * (9999999999999999 - 1000000000000000 + 1) + 1000000000000000);this.playerInfo.deviceID = randomID; localStorage.setItem("id", String(randomID)); } //random number statistically almost guarnteed to be unique
+    else { this.playerInfo.deviceID = Number(localStorage.getItem("id")!); }
+
+    const url = new URL(window.location.href);
+
+    const shadows = url.searchParams.get("shadows"); //shadows are on by default, //you can turn shadows on or off by adding shadows=true / shadows=false in the url parameters
+    if (shadows == "false") { this.shadowsEnabled = false; }
+    else { this.shadowsEnabled = true; }
+
+    const fpsString = url.searchParams.get("FPS"); //60fps by default
+    if (fpsString != undefined){ const fps = Number(fpsString);this.mainRefreshRate = Math.round(1000 / fps); }
+
+    const uploadRateString = url.searchParams.get("uploadFPS"); //30fps by default
+    if (uploadRateString != undefined){ const uploadRate = Number(uploadRateString); this.uploadRefreshRate = Math.round(1000 / uploadRate); }
 
 
     this.renderer = new THREE.WebGLRenderer({ //renderer setup
