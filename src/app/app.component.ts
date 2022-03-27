@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import CannonDebugRenderer from 'src/assets/cannonDebugRenderer';
 
-import { box, sphere } from 'src/assets/objectHelperClasses';
+import { box } from 'src/assets/objectHelperClasses';
 import { Database, ref, set, onValue} from '@angular/fire/database';
 import { remove } from '@firebase/database';
 
@@ -23,8 +23,8 @@ export class AppComponent {
   scene = new THREE.Scene();
   world = new CANNON.World();
   cannonDebugRenderer = new CannonDebugRenderer( this.scene, this.world );
+
   plane = new box();
-  //block1 = new box();
   player = new box();
   otherObjects: CANNON.Body[] = []; //list of all other objects in scene
 
@@ -36,7 +36,7 @@ export class AppComponent {
   //CONSTANTS:
   playerInfo = {
     dimensions: {width: 5, height: 7, depth: 5},
-    speed: 70,
+    speed: 45,
     jumpHeight: 30,
     colour: 0xFF0000,
 
@@ -45,19 +45,18 @@ export class AppComponent {
     deviceID: 100, //will be assigned when the program starts (100 is just a placeholder)
     name: ""
   };
-
   enemyInfo = {
     colour: 0xFF00FF, 
     mass: 0 //mass is 0 so the players aren't affected by gravity
   }
-
   impulseInfo = {
-    colour: 0xFFFFFF,
+    colour: 0x0000FF,
     radius: 1
   }
 
+  shadowsEnabled = false;
   mainRefreshRate = 16; //refresh every 16ms (60fps)
-  uploadRefreshRate = 16; //30fps
+  uploadRefreshRate = 33; //30fps
 
 
   //VARIABLES:
@@ -84,7 +83,7 @@ export class AppComponent {
   {
     this.worldSetup();
 
-    this.createObjets();
+    this.loadObjects();
     this.spawnPlayer();
 
     this.startAnimationLoop();
@@ -158,39 +157,36 @@ export class AppComponent {
     this.camera.position.y = 30;
     this.camera.rotateX(this.toRadians(-0.5));
 
+    
     const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.3);
-    this.scene.add(ambientLight);
-
     const pointLight = new THREE.PointLight(0xFFFFFF, 1);
     pointLight.position.x = 50;
     pointLight.position.y = 50;
     pointLight.position.z = 50;
-    pointLight.castShadow = true;
-    pointLight.shadow.mapSize.width = 1024; //this increases the quality
-    pointLight.shadow.mapSize.height = 1024;
+    this.scene.add(ambientLight);
     this.scene.add(pointLight);
+
+    if (this.shadowsEnabled == true) { pointLight.castShadow = true; pointLight.shadow.mapSize.width = 1024; pointLight.shadow.mapSize.height = 1024; }
 
     this.world.gravity.set(0, -50, 0)
   }
-  createObjets()
+  loadObjects()
   {
+    const textureLoader = new THREE.TextureLoader();
+    
+    const iceTexture = textureLoader.load("assets/Textures/ice.jpeg");
+    iceTexture.wrapS = THREE.RepeatWrapping;
+    iceTexture.wrapT = THREE.RepeatWrapping;
+    iceTexture.repeat.set( 1, 1 );
+
+    
     this.plane.createObject(this.scene, this.world, { width: 100, height: 10, depth: 100 }, 0x0b7d2d, 0);
     this.plane.tBody.receiveShadow = true;
     this.plane.tBody.name = "plane";
+    this.plane.tBody.material = new THREE.MeshStandardMaterial( {map: iceTexture} );
     this.plane.cBody.material = new CANNON.Material( { friction: 0.0 } );
 
-    /*
-    this.block1.createObject(this.scene, this.world, {width: 5, height: 5, depth: 5}, 0x0000FF, 100000);
-    this.block1.tBody.position.x = -20;
-    this.block1.tBody.position.y = 7;
-    this.block1.updateCANNONPosition();
-    this.block1.tBody.receiveShadow = true;
-    this.block1.tBody.castShadow = true;
-    this.block1.cBody.material = this.noFrictionMaterial;
-    */
-
     this.otherObjects.push(this.plane.cBody);
-    //this.otherObjects.push(this.block1.cBody);
 
     this.player.createObject(this.scene, this.world, { width: this.playerInfo.dimensions.width, height: this.playerInfo.dimensions.height, depth: this.playerInfo.dimensions.depth }, this.playerInfo.colour, undefined, undefined, undefined);
     this.player.tBody.receiveShadow = true;
@@ -198,6 +194,7 @@ export class AppComponent {
     this.player.cBody.angularDamping = 1; //rotation lock
     this.player.cBody.linearDamping = 0.95; //we removed the friction but we still want an abrupt stop and start
     this.player.cBody.material = this.noFrictionMaterial;
+    this.player.tBody.name = "self";
   }
   spawnPlayer()
   {
@@ -279,7 +276,7 @@ export class AppComponent {
       this.player.cBody.quaternion.normalize();
 
       //going to also apply a speed limit in each axis
-      const speedLimit = 100;
+      const speedLimit = 70;
       if (this.player.cBody.velocity.x >= speedLimit) { this.player.cBody.velocity.x = speedLimit; }
       if (this.player.cBody.velocity.x <= -speedLimit) { this.player.cBody.velocity.x = -speedLimit; }
       if (this.player.cBody.velocity.z >= speedLimit) { this.player.cBody.velocity.z = speedLimit; }
@@ -373,16 +370,14 @@ export class AppComponent {
           this.renderedImpulses.splice(i, 1);
         }
         else
-        {
-          i += 1;
-        }
+        { i += 1; }
       }
-
 
       //step world and update object positions:
       this.world.step(deltaTime / 1000);
+
       this.plane.updateTHREEPosition();
-      //this.block1.updateTHREEPosition();
+
       this.player.updateTHREEPosition();
       this.syncCameraToPlayer();
 
@@ -406,6 +401,7 @@ export class AppComponent {
     const dbRefUpload = ref(this.db, "players/" + this.playerInfo.deviceID + "/movementData");
     setInterval(() => {
 
+      //TODO: Round the values to something around 3 dp, if you round to nearest integar then it looks laggy
       const movementData = {
         position: {x: this.player.cBody.position.x, y: this.player.cBody.position.y, z: this.player.cBody.position.z},
         rotation: {x: this.player.bearing.x, y: this.player.bearing.y, z: this.player.bearing.z}
@@ -462,7 +458,7 @@ export class AppComponent {
 
     const intersects = raycaster.intersectObjects(this.scene.children);
     let destinationPoint = new THREE.Vector3(); //the raycaster returns 2 values when you click a point, Im not sure why
-    if (intersects.length == 0) { return; }
+    if (intersects.length == 0 || intersects[0].object.name == "self" ) { return; }
     else { destinationPoint = intersects[0].point }
 
     //now we need to shoot from the player to the point

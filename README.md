@@ -1,8 +1,8 @@
 # Lobby Game
 
-This project was to try and create a multiplayer game which could support many people in one lobby.
+## This project was to learn about THREEJS working with CANNONJS to create physics, and to also learn about creating multiplayer games which can support many people at once
 
-Basically you just shoot using the mouse pointer, and try and impulse people off of the plane.
+Basically you just shoot using the mouse pointer, and try and impulse people off of the platform.
 
 URL: https://lobbygame.azurewebsites.net
 
