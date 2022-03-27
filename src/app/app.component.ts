@@ -39,6 +39,7 @@ export class AppComponent {
     speed: 45,
     jumpHeight: 30,
     colour: 0xFF0000,
+    shootDelay: 500, //500ms delay between shots
 
     camera: {setY: 20, distance: 30},
 
@@ -62,6 +63,8 @@ export class AppComponent {
   //VARIABLES:
   pointerLock = false;
   popupText = "";
+  lastShot: number = Date.now();
+  
   otherPlayersObjects: {[k: number] : {
     deviceID: number, 
     movementData: {
@@ -465,6 +468,9 @@ export class AppComponent {
     if (this.pointerLock == true) //only register click when pointer lock is disabled
     { return; }
 
+    if (this.lastShot + (this.playerInfo.shootDelay) > Date.now()) { return; } //there needs to be a shoot delay, otherwise the player's could just spam
+    else { this.lastShot = Date.now(); }
+
     const raycaster = new THREE.Raycaster();
     const pointerX = ( $e.clientX / window.innerWidth ) * 2 - 1; 
     const pointerY = - ( $e.clientY / window.innerHeight ) * 2 + 1;    
@@ -484,10 +490,10 @@ export class AppComponent {
       const blastRadius = 10;
 
       const blastRadiusGeo = new THREE.SphereGeometry(blastRadius);
-      const blastRadiusMat = new THREE.MeshStandardMaterial( { color: 0xFFFFFF } )
+      const blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour } )
       const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
       blastRadiusObject.position.set(destinationPoint.x, destinationPoint.y, destinationPoint.z);
-      //this.scene.add(blastRadiusObject); //uncomment this line and comment the scene.remove() line if you want to visualise the blast radius
+      this.scene.add(blastRadiusObject); //uncomment this line and comment the scene.remove() line if you want to visualise the blast radius
 
       //we can just use the intersects function to check
       const blastRadiusBB = new THREE.Box3().setFromObject(blastRadiusObject);
@@ -510,7 +516,7 @@ export class AppComponent {
           set(dbRef, playerKnockbackVector)
         }
       }
-      this.scene.remove(blastRadiusObject);
+      setTimeout(() => {this.scene.remove(blastRadiusObject);}, 300);
     });
   }
   projectile(radius: number, shotVector: {x: number, y: number, z: number}) //just the animation for the shot
@@ -608,7 +614,6 @@ export class AppComponent {
       { this.player.bearing.y += rotationY; this.player.updateObjectBearing(); }
     }
 
-    document.onmousedown = ($e) =>
-    { this.shoot($e); }
+    document.onmousedown = ($e) => { this.shoot($e); }
   }
 }
