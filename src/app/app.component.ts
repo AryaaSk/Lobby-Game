@@ -493,7 +493,7 @@ export class AppComponent {
       const blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour } )
       const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
       blastRadiusObject.position.set(destinationPoint.x, destinationPoint.y, destinationPoint.z);
-      this.scene.add(blastRadiusObject); //uncomment this line and comment the scene.remove() line if you want to visualise the blast radius
+      //this.scene.add(blastRadiusObject); //uncomment this line and comment the scene.remove() line if you want to visualise the blast radius
 
       //we can just use the intersects function to check
       const blastRadiusBB = new THREE.Box3().setFromObject(blastRadiusObject);
@@ -516,7 +516,7 @@ export class AppComponent {
           set(dbRef, playerKnockbackVector)
         }
       }
-      setTimeout(() => {this.scene.remove(blastRadiusObject);}, 300);
+      this.scene.remove(blastRadiusObject);
     });
   }
   projectile(radius: number, shotVector: {x: number, y: number, z: number}) //just the animation for the shot
