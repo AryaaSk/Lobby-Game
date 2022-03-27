@@ -114,18 +114,27 @@ export class AppComponent {
   //STARTUP:
   ngAfterViewInit()
   {
-    this.worldSetup();
+    this.popup("Click to Play", 100000000); //want to last basically forever
+    document.body.addEventListener('click', () => {
 
-    this.loadObjects();
-    this.spawnPlayer();
+      document.body.requestPointerLock(); this.pointerLock = true;  //lock mouse on screen when game starts
 
-    this.startAnimationLoop();
-    this.startMovementListeners();
-    this.startDataLoop();
+      this.worldSetup();
 
-    this.popup("Press Q to toggle shoot mode", 2000);
-  } 
+      this.loadObjects();
+      this.spawnPlayer();
 
+      this.startAnimationLoop();
+      this.startMovementListeners();
+      this.startDataLoop();
+
+      setTimeout(() => {
+        document.getElementById("container")!.style.backgroundColor = "transparent";
+        this.popup("Press Q to toggle shoot mode", 2000);
+      }, 50);
+
+    }, {once : true} );
+  }
 
 
   
@@ -134,8 +143,6 @@ export class AppComponent {
   //WORLD FUNCTIONS:
   worldSetup()
   {
-    document.body.addEventListener( 'click', () => { document.body.requestPointerLock(); this.pointerLock = true; }, {once : true} ); //lock mouse on screen when game starts
-
     //check if there is already a deviceID in localStorage
     if (localStorage.getItem("id") == undefined)
     { const randomID = Math.floor(Math.random() * (9999999999999999 - 1000000000000000 + 1) + 1000000000000000);this.playerInfo.deviceID = randomID; localStorage.setItem("id", String(randomID)); } //random number statistically almost guarnteed to be unique

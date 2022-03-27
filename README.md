@@ -6,12 +6,17 @@ Basically you just shoot using the mouse pointer, and try and impulse people off
 
 URL: https://lobbygame.azurewebsites.net
 
-Controls:
+### Controls
 - WASD to move 
 - Press Q to toggle Shoot Mode
 
-### <u>Shoot Mode</u>
+### Shoot Mode
 In this mode you just click somewhere on the platform, or another player, and it will launch an impulse which will push the players around it away from it.
+
+### Performance
+If performace is bad, then you can add these parameters to improve it:
+- shadows=false
+- FPS=30 (Default is 60fps)
 
 Here are some previews:
 ![Preview 1](https://github.com/AryaaSk/lobbyGame/blob/master/Previews/Preview1.png?raw=true)
