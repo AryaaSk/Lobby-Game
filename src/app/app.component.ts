@@ -77,7 +77,7 @@ export class AppComponent {
   }}} = {};
   otherPlayersRendered: { [k: number] : box } = {}; //contains all the players which are currently rendered
 
-  sceneImpulses: { [k: number] : {x: number, y: number, z: number, senderID: string} } = {};
+  sceneImpulses: { [k: number] : {x: number, y: number, z: number, senderID: string} } = {}; //this is always upto date with the database, holds all the impulses in the world apart from the current player's ones
   renderedImpulses: string[] = []; //keeps track of which impulses have been rendered, not including our ones
 
 
@@ -129,6 +129,8 @@ export class AppComponent {
     }
     else
     { this.isMobile = false; }
+
+    this.isMobile = true;
   }
   ngAfterViewInit()
   {
