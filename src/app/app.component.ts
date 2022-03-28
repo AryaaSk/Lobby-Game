@@ -129,8 +129,6 @@ export class AppComponent {
     }
     else
     { this.isMobile = false; }
-
-    this.isMobile = true;
   }
   ngAfterViewInit()
   {
