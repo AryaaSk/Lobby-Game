@@ -707,11 +707,11 @@ export class AppComponent {
 
     document.body.addEventListener('touchstart', ($e) => {
       //user may just be clicking the joystick or jump button
-      const inJoystick = ($e.touches[0].clientX > joystickPos.x && $e.touches[0].clientX < (joystickPos.x + joystickPos.width)) && ($e.touches[0].clientY > joystickPos.y && $e.touches[0].clientY < (joystickPos.y + joystickPos.height))
-      const inJumpButton = ($e.touches[0].clientX > jumpButtonPos.x && $e.touches[0].clientX < (jumpButtonPos.x + jumpButtonPos.width)) && ($e.touches[0].clientY > jumpButtonPos.y && $e.touches[0].clientY < (jumpButtonPos.y + jumpButtonPos.height))
+      const inJoystick = ($e.targetTouches[0].clientX > joystickPos.x && $e.targetTouches[0].clientX < (joystickPos.x + joystickPos.width)) && ($e.targetTouches[0].clientY > joystickPos.y && $e.targetTouches[0].clientY < (joystickPos.y + joystickPos.height))
+      const inJumpButton = ($e.targetTouches[0].clientX > jumpButtonPos.x && $e.targetTouches[0].clientX < (jumpButtonPos.x + jumpButtonPos.width)) && ($e.targetTouches[0].clientY > jumpButtonPos.y && $e.targetTouches[0].clientY < (jumpButtonPos.y + jumpButtonPos.height))
 
       if (!(inJoystick || inJumpButton))
-      { this.shoot($e.touches[0].clientX, $e.touches[0].clientY) }
+      { this.shoot($e.targetTouches[0].clientX, $e.targetTouches[0].clientY) }
     });
   }
 
