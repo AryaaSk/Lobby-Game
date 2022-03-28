@@ -1,4 +1,4 @@
-<div class="container" id="container" style="height: 100vh; width: 100vw; overflow: hidden; background-color: #0d0d0d;">
+<div class="container noselect" id="container">
   <canvas id="renderingWindow" style="position: absolute; top: 0; bottom: 0; left: 0; right: 0; overflow: hidden; z-index: -1;"></canvas>
   
   <div class="infoGrid">
@@ -10,13 +10,14 @@
       <h1 style="color: white; font-size: 4rem;" class="popupText" id="popupText">{{popupText}}</h1>
     </div>
 
-    <div style="grid-column: 1 / 2; grid-row: 3 / 4;;">
-      <div id="joyDiv" style="width:200px; height:200px;"></div>
+    <div style="grid-column: 1 / 2; grid-row: 3 / 4; position: relative;">
+      <div id="joyDiv" class="noselect"></div>
     </div>
-  </div>
 
-  <div class="crosshairWrapper">
-    <div class="crosshair"></div>
+    <div style="grid-column: 3 / 4; grid-row: 3 / 4; position: relative;">
+      <input type="button" class="jumpButton" id="jumpButton" value="Jump">
+    </div>
+
   </div>
 
 </div>

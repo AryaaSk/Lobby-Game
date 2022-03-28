@@ -53,7 +53,8 @@ export class AppComponent {
   }
   impulseInfo = {
     colour: 0x0000FF,
-    radius: 1
+    radius: 1,
+    blastRadius: 10
   }
 
   isMobile = false;
@@ -117,8 +118,21 @@ export class AppComponent {
 
 
   //STARTUP:
+  checkMobile()
+  {
+    //checks if the game is running on mobile or not using CSS media queries
+    var match = window.matchMedia || window.matchMedia;
+    if(match) {
+        var mq = match("(pointer:coarse)");
+        this.isMobile = mq.matches!;
+    }
+    else
+    { this.isMobile = false; }
+  }
   ngAfterViewInit()
   {
+    this.checkMobile();
+
     if (this.isMobile == true)
     {
       this.worldSetup();
@@ -130,6 +144,7 @@ export class AppComponent {
       this.startDataLoop();
 
       this.mobileControls();
+      document.getElementById("popupText")!.style.fontSize = "3rem";
       setTimeout(() => {
         document.getElementById("container")!.style.backgroundColor = "transparent";
         this.popup("Press Q to toggle shoot mode", 2000);
@@ -151,6 +166,7 @@ export class AppComponent {
         this.startDataLoop();
 
         this.keyboardMouseControls();
+        document.getElementById("jumpButton")!.style.display = "none";
         setTimeout(() => {
           document.getElementById("container")!.style.backgroundColor = "transparent";
           this.popup("Press Q to toggle shoot mode", 2000);
@@ -190,8 +206,15 @@ export class AppComponent {
     });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    if (this.shadowsEnabled == true) { this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
+    
+    window.addEventListener("resize", () => { //to resize renderer when window resizes
+      this.camera.aspect = window.innerWidth / window.innerHeight;
+      this.camera.updateProjectionMatrix();
+      this.renderer.setPixelRatio(window.devicePixelRatio);
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.render();
+    })
 
     this.camera.position.y = 30;
     this.camera.rotateX(this.toRadians(-0.5));
@@ -255,7 +278,6 @@ export class AppComponent {
   //ANIMATION/TIME LOOP FUNCTIONS:
   startAnimationLoop()
   {
-    //TODO: Implement delta time
     let lastUpdate = Date.now();
     setInterval(() => {
       const now = Date.now();
@@ -407,8 +429,18 @@ export class AppComponent {
         const impulseID = this.renderedImpulses[i];
         if (this.sceneImpulses[Number(impulseID)] == undefined)
         {
-          this.scene.remove(this.scene.getObjectByName(impulseID)!)
-          this.renderedImpulses.splice(i, 1);
+          /*
+          //if we need to remove them, it means they have finished their path, so give it a blast radius
+          const blastRadiusGeo = new THREE.SphereGeometry(this.impulseInfo.blastRadius);
+          const blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour, transparent: true, opacity: 0.4 } )
+          const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
+          blastRadiusObject.position.set(impulseToRemove.position.x, impulseToRemove.position.y, impulseToRemove.position.z);
+          this.scene.add(blastRadiusObject);
+          */
+
+          this.scene.remove(this.scene.getObjectByName(impulseID)!);
+          //this.scene.remove(blastRadiusObject);
+          this.renderedImpulses.splice(i, 1); 
         }
         else
         { i += 1; }
@@ -512,13 +544,11 @@ export class AppComponent {
     this.projectile(this.impulseInfo.radius, shotVector).then(() => {
 
       //once the animation has finished, we need to check which players are inside the blast radius
-      const blastRadius = 10;
-
-      const blastRadiusGeo = new THREE.SphereGeometry(blastRadius);
-      const blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour } )
+      const blastRadiusGeo = new THREE.SphereGeometry(this.impulseInfo.blastRadius);
+      const blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour, transparent: true, opacity: 0.4 } )
       const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
       blastRadiusObject.position.set(destinationPoint.x, destinationPoint.y, destinationPoint.z);
-      //this.scene.add(blastRadiusObject); //uncomment this line and comment the scene.remove() line if you want to visualise the blast radius
+      this.scene.add(blastRadiusObject);
 
       //we can just use the intersects function to check
       const blastRadiusBB = new THREE.Box3().setFromObject(blastRadiusObject);
@@ -541,7 +571,7 @@ export class AppComponent {
           set(dbRef, playerKnockbackVector)
         }
       }
-      this.scene.remove(blastRadiusObject);
+      setTimeout(() => { this.scene.remove(blastRadiusObject);}, 300);
     });
   }
   projectile(radius: number, shotVector: {x: number, y: number, z: number}) //just the animation for the shot
@@ -619,7 +649,8 @@ export class AppComponent {
   //MOBILE CONTROLS;
   mobileControls()
   {
-    var joy = new JoyStick('joyDiv');
+    const colour = `#${this.playerInfo.colour.toString(16).toUpperCase()}`;
+    var joy = new JoyStick('joyDiv', {internalFillColor: colour, externalStrokeColor: "#000000" });
     joy.internalFillColor = "red";
 
     //check controls with the refresh rate
@@ -628,7 +659,7 @@ export class AppComponent {
       const xPosition = joy.GetX(); //goes from -100 at left to 100 at right
       const yPosition = joy.GetY(); //goes from 100 at top to -100 at bottom
 
-      //set deadzone to 50
+      //set deadzone
       const deadzone = 50;
 
       if (xPosition < -deadzone)
@@ -637,13 +668,43 @@ export class AppComponent {
       { this.player.bearing.y += 3; this.player.updateObjectBearing(); }
 
       if (yPosition > deadzone)
-      { this.keysDown = ["w"]; }
+      { if (this.keysDown.includes("w") == false) { this.keysDown.push("w") }; }
       else if (yPosition <= deadzone && yPosition >= -deadzone)
-      { this.keysDown = []; }
+      { 
+        //remove w and s, and don't accidentally remove the space bar
+        const wIndex = this.keysDown.indexOf("w");
+        const sIndex = this.keysDown.indexOf("s");
+
+        if (wIndex != -1) { this.keysDown.splice(wIndex, 1) }
+        if (sIndex != -1) { this.keysDown.splice(sIndex, 1) }
+      }
       else 
-      { this.keysDown = ["s"]; }
+      { if (this.keysDown.includes("s") == false) { this.keysDown.push("s") }; }
 
     }, this.mainRefreshRate);
+
+    document.getElementById("jumpButton")!.onclick = () => {
+      if (this.keysDown.includes(" ") == false) { this.keysDown.push(" "); }
+
+      //wait until the click has been register, which will be at max the mainRefreshRate
+      setTimeout(() => {
+        this.keysDown.splice(this.keysDown.indexOf(" "), 1);
+      }, this.mainRefreshRate)
+    }
+
+    //need to check if user was just clicking the joystick or the jumpButton
+    //get postions:
+    const joystickPos = document.getElementById("joyDiv")!.getBoundingClientRect();
+    const jumpButtonPos = document.getElementById("jumpButton")!.getBoundingClientRect();
+
+    document.onpointerdown = ($e) => { 
+      //user may just be clicking the joystick or jump button
+      const inJoystick = ($e.clientX > joystickPos.x && $e.clientX < (joystickPos.x + joystickPos.width)) && ($e.clientY > joystickPos.y && $e.clientY < (joystickPos.y + joystickPos.height))
+      const inJumpButton = ($e.clientX > jumpButtonPos.x && $e.clientX < (jumpButtonPos.x + jumpButtonPos.width)) && ($e.clientY > jumpButtonPos.y && $e.clientY < (jumpButtonPos.y + jumpButtonPos.height))
+
+      if (!(inJoystick || inJumpButton))
+      { this.shoot($e) }
+    };
   }
 
 
