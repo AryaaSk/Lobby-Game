@@ -54,7 +54,8 @@ export class AppComponent {
   impulseInfo = {
     colour: 0x0000FF,
     radius: 1,
-    blastRadius: 10
+    blastRadius: 10,
+    multiplier: 10
   }
 
   isMobile = false;
@@ -76,8 +77,8 @@ export class AppComponent {
   }}} = {};
   otherPlayersRendered: { [k: number] : box } = {}; //contains all the players which are currently rendered
 
-  sceneImpulses: { [k: number] : {x: number, y: number, z: number} } = {};
-  renderedImpulses: string[] = []; //keeps track of which impulses have been rendered
+  sceneImpulses: { [k: number] : {x: number, y: number, z: number, senderID: string} } = {};
+  renderedImpulses: string[] = []; //keeps track of which impulses have been rendered, not including our ones
 
 
 
@@ -429,18 +430,25 @@ export class AppComponent {
         const impulseID = this.renderedImpulses[i];
         if (this.sceneImpulses[Number(impulseID)] == undefined)
         {
-          /*
-          //if we need to remove them, it means they have finished their path, so give it a blast radius
-          const blastRadiusGeo = new THREE.SphereGeometry(this.impulseInfo.blastRadius);
-          const blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour, transparent: true, opacity: 0.4 } )
-          const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
-          blastRadiusObject.position.set(impulseToRemove.position.x, impulseToRemove.position.y, impulseToRemove.position.z);
-          this.scene.add(blastRadiusObject);
-          */
+          //if we need to remove them, it means they have finished their path, so we can also render a blast radius
+          const impulse = this.scene.getObjectByName(impulseID);
+          if (impulse != undefined) //if it is undefined then it has already been removed from the scene, javascript is just a bit slow...
+          {
+            const blastRadiusGeo = new THREE.SphereGeometry(this.impulseInfo.blastRadius);
+            const blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour, transparent: true, opacity: 0.4 } )
+            const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
+            blastRadiusObject.position.set(impulse!.position.x, impulse!.position.y, impulse!.position.z);
+            this.scene.add(blastRadiusObject);
 
-          this.scene.remove(this.scene.getObjectByName(impulseID)!);
-          //this.scene.remove(blastRadiusObject);
-          this.renderedImpulses.splice(i, 1); 
+            this.scene.remove(impulse);
+            this.renderedImpulses.splice(i, 1); 
+
+            setTimeout(() => {
+              this.scene.remove(blastRadiusObject);
+            }, 300)
+          }
+          else
+          { this.renderedImpulses.splice(i, 1); }
         }
         else
         { i += 1; }
@@ -520,7 +528,7 @@ export class AppComponent {
 
 
   //GAME MECHANICS:
-  shoot($e: MouseEvent)
+  shoot(x: number, y: number)
   {
     if (this.pointerLock == true) //only register click when pointer lock is disabled
     { return; }
@@ -529,8 +537,8 @@ export class AppComponent {
     else { this.lastShot = Date.now(); }
 
     const raycaster = new THREE.Raycaster();
-    const pointerX = ( $e.clientX / window.innerWidth ) * 2 - 1; 
-    const pointerY = - ( $e.clientY / window.innerHeight ) * 2 + 1;    
+    const pointerX = ( x / window.innerWidth ) * 2 - 1; 
+    const pointerY = - ( y / window.innerHeight ) * 2 + 1;    
 
     raycaster.setFromCamera({x: pointerX, y: pointerY}, this.camera);
 
@@ -601,7 +609,7 @@ export class AppComponent {
         projectile.translateZ(zIncrements);
 
         //need to upload the absolute values for the projectile to the realtime database
-        set(dbRef, {x: projectile.position.x, y: projectile.position.y, z: projectile.position.z});
+        set(dbRef, {x: projectile.position.x, y: projectile.position.y, z: projectile.position.z, senderID: this.playerInfo.deviceID});
 
         if (counter >= intervals) { clearInterval(interval); setTimeout(() => {this.scene.remove(projectile);}, 100); remove(dbRef); resolve("Finish animation"); } //once animation has finished remove it
         counter += 1;
@@ -619,7 +627,7 @@ export class AppComponent {
       if (impluse == null || (impluse.x == 0 && impluse.y == 0 && impluse.z == 0)) { return; }
 
       //apply the impluse and then delete current impluse
-      const multiplier = 10;
+      const multiplier = this.impulseInfo.multiplier;
       const cannonImpluse = new CANNON.Vec3((impluse.x * multiplier), impluse.y * multiplier, (impluse.z * multiplier));
       this.player.cBody.applyImpulse(cannonImpluse);
 
@@ -637,7 +645,8 @@ export class AppComponent {
       for (let impulseID in data)
       {
         const impulse = data[impulseID];
-        this.sceneImpulses[Number(impulseID)] = impulse; //will then get rendered in the animation loop
+        if (impulse.senderID != this.playerInfo.deviceID) //don't want to render our own impulses
+        { this.sceneImpulses[Number(impulseID)] = impulse; } //will then get rendered in the animation loop
       }
     })
   }
@@ -683,28 +692,27 @@ export class AppComponent {
 
     }, this.mainRefreshRate);
 
-    document.getElementById("jumpButton")!.onclick = () => {
+    document.getElementById("jumpButton")!.addEventListener('touchstart', () => {
       if (this.keysDown.includes(" ") == false) { this.keysDown.push(" "); }
 
       //wait until the click has been register, which will be at max the mainRefreshRate
       setTimeout(() => {
         this.keysDown.splice(this.keysDown.indexOf(" "), 1);
       }, this.mainRefreshRate)
-    }
+    })
 
     //need to check if user was just clicking the joystick or the jumpButton
-    //get postions:
     const joystickPos = document.getElementById("joyDiv")!.getBoundingClientRect();
     const jumpButtonPos = document.getElementById("jumpButton")!.getBoundingClientRect();
 
-    document.onpointerdown = ($e) => { 
+    document.body.addEventListener('touchstart', ($e) => {
       //user may just be clicking the joystick or jump button
-      const inJoystick = ($e.clientX > joystickPos.x && $e.clientX < (joystickPos.x + joystickPos.width)) && ($e.clientY > joystickPos.y && $e.clientY < (joystickPos.y + joystickPos.height))
-      const inJumpButton = ($e.clientX > jumpButtonPos.x && $e.clientX < (jumpButtonPos.x + jumpButtonPos.width)) && ($e.clientY > jumpButtonPos.y && $e.clientY < (jumpButtonPos.y + jumpButtonPos.height))
+      const inJoystick = ($e.touches[0].clientX > joystickPos.x && $e.touches[0].clientX < (joystickPos.x + joystickPos.width)) && ($e.touches[0].clientY > joystickPos.y && $e.touches[0].clientY < (joystickPos.y + joystickPos.height))
+      const inJumpButton = ($e.touches[0].clientX > jumpButtonPos.x && $e.touches[0].clientX < (jumpButtonPos.x + jumpButtonPos.width)) && ($e.touches[0].clientY > jumpButtonPos.y && $e.touches[0].clientY < (jumpButtonPos.y + jumpButtonPos.height))
 
       if (!(inJoystick || inJumpButton))
-      { this.shoot($e) }
-    };
+      { this.shoot($e.touches[0].clientX, $e.touches[0].clientY) }
+    });
   }
 
 
@@ -731,6 +739,6 @@ export class AppComponent {
       { this.player.bearing.y += rotationY; this.player.updateObjectBearing(); }
     }
 
-    document.onmousedown = ($e) => { this.shoot($e); }
+    document.onmousedown = ($e) => { this.shoot($e.clientX, $e.clientY); }
   }
 }
