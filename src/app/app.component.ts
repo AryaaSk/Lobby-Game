@@ -176,6 +176,8 @@ export class AppComponent {
     this.camera.rotateX(this.toRadians(-0.5));
 
     
+    this.scene.background = new THREE.Color( 0x0d0d0d ) //dark grey
+
     const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.3);
     const pointLight = new THREE.PointLight(0xFFFFFF, 1);
     pointLight.position.x = 50;
