@@ -4,8 +4,9 @@ import * as CANNON from 'cannon-es';
 import CannonDebugRenderer from 'src/assets/cannonDebugRenderer';
 
 import { box } from 'src/assets/objectHelperClasses';
-import { Database, ref, set, onValue} from '@angular/fire/database';
-import { remove } from '@firebase/database';
+import { Database, ref, set, onValue, remove} from '@angular/fire/database';
+
+declare var JoyStick: any;
 
 @Component({
   selector: 'app-root',
@@ -55,6 +56,7 @@ export class AppComponent {
     radius: 1
   }
 
+  isMobile = false;
   shadowsEnabled = true;
   mainRefreshRate = 16; //refresh every 16ms (60fps)
   uploadRefreshRate = 33; //30fps
@@ -117,26 +119,45 @@ export class AppComponent {
   //STARTUP:
   ngAfterViewInit()
   {
-    this.popup("Click to Play", 100000000); //want to last basically forever
-    document.body.addEventListener('click', () => {
-
-      document.body.requestPointerLock(); this.pointerLock = true;  //lock mouse on screen when game starts
-
+    if (this.isMobile == true)
+    {
       this.worldSetup();
 
       this.loadObjects();
       this.spawnPlayer();
 
       this.startAnimationLoop();
-      this.startMovementListeners();
       this.startDataLoop();
 
+      this.mobileControls();
       setTimeout(() => {
         document.getElementById("container")!.style.backgroundColor = "transparent";
         this.popup("Press Q to toggle shoot mode", 2000);
       }, 50);
+    }
+    else
+    {
+      this.popup("Click to Play", 100000000); //want to last basically forever
+      document.body.addEventListener('click', () => {
 
-    }, {once : true} );
+        document.body.requestPointerLock(); this.pointerLock = true;  //lock mouse on screen when game starts
+
+        this.worldSetup();
+
+        this.loadObjects();
+        this.spawnPlayer();
+
+        this.startAnimationLoop();
+        this.startDataLoop();
+
+        this.keyboardMouseControls();
+        setTimeout(() => {
+          document.getElementById("container")!.style.backgroundColor = "transparent";
+          this.popup("Press Q to toggle shoot mode", 2000);
+        }, 50);
+
+      }, {once : true} );
+    }
   }
 
 
@@ -455,7 +476,9 @@ export class AppComponent {
     if (userPassword == password)
     {
       const playersRef = ref(this.db, "players");
+      const impulsesRef = ref(this.db, "impulses");
       remove(playersRef);
+      remove(impulsesRef);
       location.reload();
     }
     else
@@ -539,7 +562,7 @@ export class AppComponent {
 
       //when this projectile is travelling we also want to upload the projectiles position
       const projectileID = Math.floor(Math.random() * (9999999999999999 - 1000000000000000 + 1) + 1000000000000000); //random number statistically almost guarnteed to be unique 
-      const dbRef = ref(this.db, "impluses/" + projectileID);
+      const dbRef = ref(this.db, "impulses/" + projectileID);
 
       let counter = 0;
       const interval = setInterval(() => {
@@ -576,7 +599,7 @@ export class AppComponent {
   }
   lookForImpluse() //this will look for impulses everywhere in the scene
   {
-    const dbRef = ref(this.db, "impluses");
+    const dbRef = ref(this.db, "impulses");
     onValue(dbRef, (snapshot) => {
       const data = snapshot.val();
 
@@ -593,10 +616,41 @@ export class AppComponent {
 
 
 
+  //MOBILE CONTROLS;
+  mobileControls()
+  {
+    var joy = new JoyStick('joyDiv');
+    joy.internalFillColor = "red";
+
+    //check controls with the refresh rate
+    setInterval(() => {
+        
+      const xPosition = joy.GetX(); //goes from -100 at left to 100 at right
+      const yPosition = joy.GetY(); //goes from 100 at top to -100 at bottom
+
+      //set deadzone to 50
+      const deadzone = 50;
+
+      if (xPosition < -deadzone)
+      { this.player.bearing.y -= 3; this.player.updateObjectBearing(); }
+      else if (xPosition > deadzone)
+      { this.player.bearing.y += 3; this.player.updateObjectBearing(); }
+
+      if (yPosition > deadzone)
+      { this.keysDown = ["w"]; }
+      else if (yPosition <= deadzone && yPosition >= -deadzone)
+      { this.keysDown = []; }
+      else 
+      { this.keysDown = ["s"]; }
+
+    }, this.mainRefreshRate);
+  }
+
+
   
-  //KEYBOARD/MOUSE LISTENERS
+  //KEYBOARD/MOUSE LISTENERS:
   keysDown: string[] = []
-  startMovementListeners()
+  keyboardMouseControls()
   {
     document.onkeydown = ($e) =>  //so there is only ever 1 key of 1 type in the array
     {  
