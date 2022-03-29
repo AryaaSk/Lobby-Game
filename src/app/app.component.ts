@@ -30,14 +30,12 @@ export class AppComponent {
   otherObjects: CANNON.Body[] = []; //list of all other objects in scene
 
 
-  //Materials:
-  noFrictionMaterial = new CANNON.Material( { friction: 0.0 } );;
-
 
   //CONSTANTS:
   playerInfo = {
     dimensions: {width: 5, height: 7, depth: 5},
     speed: 45,
+    speedLimit: 70,
     jumpHeight: 30,
     colour: 0xFF0000,
     shootDelay: 500, //500ms delay between shots
@@ -62,6 +60,12 @@ export class AppComponent {
   shadowsEnabled = true;
   mainRefreshRate = 16; //refresh every 16ms (60fps)
   uploadRefreshRate = 33; //30fps
+
+
+  //Materials:
+  noFrictionMaterial = new CANNON.Material( { friction: 0.0 } );;
+  blastRadiusGeo = new THREE.SphereGeometry(this.impulseInfo.blastRadius);
+  blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour, transparent: true, opacity: 0.4 } )
 
 
   //VARIABLES:
@@ -285,70 +289,9 @@ export class AppComponent {
       const deltaTime = now - lastUpdate;
       lastUpdate = now;
 
-      //to move player, calculate the overall force, rather than individually applying the forces, then just apply the overally force after each run of the switch statement
-      let movementVector = new CANNON.Vec3(0, 0, 0);
-      let rotationY = 0;
-
-      let i = 0;
-      while (i != this.keysDown.length)
-      {
-        const key = this.keysDown[i].toLowerCase();
-        switch (key)
-        {
-          case "w":
-            movementVector.z -= 1;
-            break;
-          case "s":
-            movementVector.z += 1;
-            break;
-          case "a":
-            movementVector.x -= 1;
-            break;
-          case "d":
-            movementVector.x += 1;
-            break;
-
-          case " ": //we can also make a jump by giving a force in the y axis
-            let i = 0;
-            while (i != this.otherObjects.length) //check contact for every object
-            { 
-              let isColliding: any[] = []; //check if object is in the air (by checking if it is in contact with ground)
-              this.world.narrowphase.getContacts([this.player.cBody], [this.otherObjects[i]], this.world, isColliding, [], [], [])
-              if (isColliding.length >= 1) { movementVector.y += 1; break; }
-              i += 1;
-            }
-            break;
-
-          default:
-            break;
-        }
-        i += 1;
-      }
-
-      //don't want the force to add up and become exponential, so i created this which checks the current speed, then only adds the required amount
-      //this.player.cBody.velocity = new CANNON.Vec3(0, this.player.cBody.velocity.y, 0);
-      const currentVelocity = this.player.cBody.velocity;
-      const currentSpeed = Math.sqrt(currentVelocity.x**2 + currentVelocity.z**2);
-      const appliedForce = Math.abs(this.playerInfo.speed - currentSpeed); //to keep it at a stable 30 (not currently needed since I reset the speed before each movement)
-
-      const yVelocity = Math.abs(currentVelocity.y); //check velocity in y-axis, if it is >1 then don't allow another jump, since it could cause jump stacking
-      if (yVelocity > 1)
-      { movementVector.y = 0; }
-
-      const impluseVector = new CANNON.Vec3(appliedForce * movementVector.x, this.playerInfo.jumpHeight * movementVector.y, appliedForce * movementVector.z); 
-      this.player.cBody.applyLocalImpulse(impluseVector);
-      this.player.cBody.quaternion.normalize();
-
-      //going to also apply a speed limit in each axis
-      const speedLimit = 70;
-      if (this.player.cBody.velocity.x >= speedLimit) { this.player.cBody.velocity.x = speedLimit; }
-      if (this.player.cBody.velocity.x <= -speedLimit) { this.player.cBody.velocity.x = -speedLimit; }
-      if (this.player.cBody.velocity.z >= speedLimit) { this.player.cBody.velocity.z = speedLimit; }
-      if (this.player.cBody.velocity.z <= -speedLimit) { this.player.cBody.velocity.z = -speedLimit; }
+      //hande movement
+      this.handleMovement();
       
-      this.player.bearing.y += rotationY;
-      this.player.updateObjectBearing();
-
       //we can check if the player's y coordinate is <-10, if so then you know they have fallen off the edge and you can just restart the page and say they died
       if (this.player.cBody.position.y < -10)
       {
@@ -357,123 +300,196 @@ export class AppComponent {
       }
 
       //add other players:
-      for (let key in this.otherPlayersObjects)
-      {
-        const player = this.otherPlayersObjects[Number(key)];
-        const deviceID = player.deviceID;
-
-        if (deviceID != this.playerInfo.deviceID) //if the deviceID is ours then we don't want to render a new object for ourselves
-        {
-          //check if this deviceID exists in the threejs scene
-          if (this.scene.getObjectByName(String(deviceID)) == undefined)
-          {
-            const newPlayer = new box();
-            newPlayer.id = deviceID;
-
-            newPlayer.createObject(this.scene, this.world, {width: 5, height: 7, depth: 5}, this.enemyInfo.colour, this.enemyInfo.mass);
-            newPlayer.cBody.angularDamping = 1;
-            newPlayer.tBody.receiveShadow = true;
-            newPlayer.tBody.castShadow = true;
-            newPlayer.cBody.material =  this.noFrictionMaterial;;
-
-            this.otherPlayersRendered[deviceID] = newPlayer; //add it to the rendered objects
-            this.otherObjects.push(newPlayer.cBody);
-          }
-          else
-          {
-            //if it does exist then it will be in the otherPlayersRendered dictionary
-            const currentPlayer = this.otherPlayersRendered[deviceID];
-        
-            currentPlayer.cBody.position.x = player.movementData.position.x;
-            currentPlayer.cBody.position.y = player.movementData.position.y;
-            currentPlayer.cBody.position.z = player.movementData.position.z;
-
-            currentPlayer.bearing.x = player.movementData.rotation.x;
-            currentPlayer.bearing.y = player.movementData.rotation.y;
-            currentPlayer.bearing.z = player.movementData.rotation.z;
-            currentPlayer.updateObjectBearing();
-
-            currentPlayer.updateTHREEPosition();
-          }
-        }
-      }
-
+      this.renderEnemies();
 
       //render the sceneImpulses as well:
-      for (let impulseID in this.sceneImpulses)
-      {
-        const impulse = this.sceneImpulses[impulseID]
-        this.renderedImpulses.push(impulseID);
-
-        //need to create an impulse three object, then just update it
-        if (this.scene.getObjectByName(impulseID) == undefined)
-        {
-          const projectileGeo = new THREE.SphereGeometry(this.impulseInfo.radius);
-          const projectileMat = new THREE.MeshBasicMaterial( { color: this.impulseInfo.colour } )
-          const projectile = new THREE.Mesh(projectileGeo, projectileMat);
-          projectile.position.set(impulse.x, impulse.y, impulse.z);
-          projectile.name = impulseID;
-          this.scene.add(projectile);
-        }
-        else
-        {
-          //we can access it from this.scene.getObjectByName(impulseID)
-          const projectile = this.scene.getObjectByName(impulseID)!;
-          projectile.position.set(impulse.x, impulse.y, impulse.z);
-        }
-      }
+      this.renderEnemyImpulses();
 
       //Check which ids are in the rendered impulses, but not in the sceneImpulses, those are the impulses which need to be removed from the scene
-      i = 0;
-      while (i != this.renderedImpulses.length)
-      {
-        const impulseID = this.renderedImpulses[i];
-        if (this.sceneImpulses[Number(impulseID)] == undefined)
-        {
-          //if we need to remove them, it means they have finished their path, so we can also render a blast radius
-          const impulse = this.scene.getObjectByName(impulseID);
-          if (impulse != undefined) //if it is undefined then it has already been removed from the scene, javascript is just a bit slow...
-          {
-            const blastRadiusGeo = new THREE.SphereGeometry(this.impulseInfo.blastRadius);
-            const blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour, transparent: true, opacity: 0.4 } )
-            const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
-            blastRadiusObject.position.set(impulse!.position.x, impulse!.position.y, impulse!.position.z);
-            this.scene.add(blastRadiusObject);
-
-            this.scene.remove(impulse);
-            this.renderedImpulses.splice(i, 1); 
-
-            setTimeout(() => {
-              this.scene.remove(blastRadiusObject);
-            }, 300)
-          }
-          else
-          { this.renderedImpulses.splice(i, 1); }
-        }
-        else
-        { i += 1; }
-      }
+      this.removeEnemyImpulses();
 
       //step world and update object positions:
-      this.world.step(deltaTime / 1000);
+      this.updateWorld(deltaTime);
 
-      this.plane.updateTHREEPosition();
-
-      this.player.updateTHREEPosition();
-      this.syncCameraToPlayer();
-
-      //this.cannonDebugRenderer.update();
       this.render();
     }, this.mainRefreshRate);
   }
+
+  handleMovement()
+  {
+    //to move player, calculate the overall force, rather than individually applying the forces, then just apply the overally force after each run of the switch statement
+    let movementVector = new CANNON.Vec3(0, 0, 0);
+    let rotationY = 0;
+    let i = 0;
+    while (i != this.keysDown.length)
+    {
+      const key = this.keysDown[i].toLowerCase();
+      switch (key)
+      {
+        case "w": movementVector.z -= 1; break;
+        case "s": movementVector.z += 1; break;
+        case "a": movementVector.x -= 1; break;
+        case "d": movementVector.x += 1; break;
+
+        case " ": //we can also make a jump by giving a force in the y axis
+          let a = 0;
+          while (a != this.otherObjects.length) //check contact for every object
+          { 
+            let isColliding: any[] = []; //check if object is in the air (by checking if it is in contact with ground)
+            this.world.narrowphase.getContacts([this.player.cBody], [this.otherObjects[a]], this.world, isColliding, [], [], [])
+            if (isColliding.length >= 1) { movementVector.y += 1; break; }
+            a += 1;
+          }
+          break;
+
+        default:
+          break;
+      }
+      i += 1;
+    }
+
+    const currentVelocity = this.player.cBody.velocity;
+    const currentSpeed = Math.sqrt(currentVelocity.x**2 + currentVelocity.z**2);
+    const appliedForce = Math.abs(this.playerInfo.speed - currentSpeed); //to keep it at a stable 30 (not currently needed since I reset the speed before each movement)
+
+    const yVelocity = Math.abs(currentVelocity.y); //check velocity in y-axis, if it is >1 then don't allow another jump, since it could cause jump stacking
+    if (yVelocity > 1) { movementVector.y = 0; }
+
+    const impluseVector = new CANNON.Vec3(appliedForce * movementVector.x, this.playerInfo.jumpHeight * movementVector.y, appliedForce * movementVector.z); 
+    this.player.cBody.applyLocalImpulse(impluseVector);
+    this.player.cBody.quaternion.normalize();
+
+    //going to also apply a speed limit in each axis
+    const speedLimit = this.playerInfo.speedLimit;
+    if (this.player.cBody.velocity.x >= speedLimit) { this.player.cBody.velocity.x = speedLimit; }
+    if (this.player.cBody.velocity.x <= -speedLimit) { this.player.cBody.velocity.x = -speedLimit; }
+    if (this.player.cBody.velocity.z >= speedLimit) { this.player.cBody.velocity.z = speedLimit; }
+    if (this.player.cBody.velocity.z <= -speedLimit) { this.player.cBody.velocity.z = -speedLimit; }
+    
+    this.player.bearing.y += rotationY;
+    this.player.updateObjectBearing();
+  }
+
+  renderEnemies()
+  {
+    for (let key in this.otherPlayersObjects)
+    {
+      const player = this.otherPlayersObjects[Number(key)];
+      const deviceID = player.deviceID;
+
+      if (deviceID != this.playerInfo.deviceID) //if the deviceID is ours then we don't want to render a new object for ourselves
+      {
+        //check if this deviceID exists in the threejs scene
+        if (this.scene.getObjectByName(String(deviceID)) == undefined)
+        {
+          const newPlayer = new box();
+          newPlayer.id = deviceID;
+
+          newPlayer.createObject(this.scene, this.world, {width: 5, height: 7, depth: 5}, this.enemyInfo.colour, this.enemyInfo.mass);
+          newPlayer.cBody.angularDamping = 1;
+          newPlayer.tBody.receiveShadow = true;
+          newPlayer.tBody.castShadow = true;
+          newPlayer.cBody.material =  this.noFrictionMaterial;;
+
+          this.otherPlayersRendered[deviceID] = newPlayer; //add it to the rendered objects
+          this.otherObjects.push(newPlayer.cBody);
+        }
+        else
+        {
+          //if it does exist then it will be in the otherPlayersRendered dictionary
+          const currentPlayer = this.otherPlayersRendered[deviceID];
+      
+          currentPlayer.cBody.position.x = player.movementData.position.x;
+          currentPlayer.cBody.position.y = player.movementData.position.y;
+          currentPlayer.cBody.position.z = player.movementData.position.z;
+
+          currentPlayer.bearing.x = player.movementData.rotation.x;
+          currentPlayer.bearing.y = player.movementData.rotation.y;
+          currentPlayer.bearing.z = player.movementData.rotation.z;
+          currentPlayer.updateObjectBearing();
+
+          currentPlayer.updateTHREEPosition();
+        }
+      }
+    }
+  }
+
+  renderEnemyImpulses()
+  {
+    for (let impulseID in this.sceneImpulses)
+    {
+      const impulse = this.sceneImpulses[impulseID]
+      this.renderedImpulses.push(impulseID);
+
+      //need to create an impulse three object, then just update it
+      if (this.scene.getObjectByName(impulseID) == undefined)
+      {
+        const projectileGeo = new THREE.SphereGeometry(this.impulseInfo.radius);
+        const projectileMat = new THREE.MeshBasicMaterial( { color: this.impulseInfo.colour } )
+        const projectile = new THREE.Mesh(projectileGeo, projectileMat);
+        projectile.position.set(impulse.x, impulse.y, impulse.z);
+        projectile.name = impulseID;
+        this.scene.add(projectile);
+      }
+      else
+      {
+        //we can access it from this.scene.getObjectByName(impulseID)
+        const projectile = this.scene.getObjectByName(impulseID)!;
+        projectile.position.set(impulse.x, impulse.y, impulse.z);
+      }
+    }
+  }
+
+  removeEnemyImpulses() //when the impulse has finished it's path, we also render a blast radius
+  {
+    let i = 0;
+    while (i != this.renderedImpulses.length)
+    {
+      const impulseID = this.renderedImpulses[i];
+      if (this.sceneImpulses[Number(impulseID)] == undefined)
+      {
+        //if we need to remove them, it means they have finished their path, so we can also render a blast radius
+        const impulse = this.scene.getObjectByName(impulseID);
+        if (impulse != undefined) //if it is undefined then it has already been removed from the scene, javascript is just a bit slow...
+        {
+          const blastRadiusObject = new THREE.Mesh(this.blastRadiusGeo, this.blastRadiusMat);
+          blastRadiusObject.position.set(impulse!.position.x, impulse!.position.y, impulse!.position.z);
+          this.scene.add(blastRadiusObject);
+
+          this.scene.remove(impulse);
+          this.renderedImpulses.splice(i, 1); 
+
+          setTimeout(() => { this.scene.remove(blastRadiusObject); }, 300)
+        }
+        else
+        { this.renderedImpulses.splice(i, 1); }
+      }
+      else
+      { i += 1; }
+    }
+  }
+
+  updateWorld(deltaTime: number)
+  {
+    this.world.step(deltaTime / 1000);
+
+    this.plane.updateTHREEPosition();
+
+    this.player.updateTHREEPosition();
+    this.syncCameraToPlayer();
+
+    //this.cannonDebugRenderer.update();
+  }
+
+
+
+
+
 
   //Server and Database
   startDataLoop() 
   {
     //I can't upload everytime in the main animation loop, since it would be too often
-    //This loop should be around 1 per second, it just creates the upload object then uploads it to firebase
-    //It also gets other people's data, and downloads them here
-
     const oneTimeUpload = ref(this.db, "players/" + this.playerInfo.deviceID);
 
     //upload 1 time data such as deviceID, and in the future colour and name
@@ -551,10 +567,8 @@ export class AppComponent {
     const shotVector = {x: destinationPoint.x - this.player.tBody.position.x, y: destinationPoint.y - this.player.tBody.position.y, z: destinationPoint.z - this.player.tBody.position.z}
     this.projectile(this.impulseInfo.radius, shotVector).then(() => {
 
-      //once the animation has finished, we need to check which players are inside the blast radius
-      const blastRadiusGeo = new THREE.SphereGeometry(this.impulseInfo.blastRadius);
-      const blastRadiusMat = new THREE.MeshStandardMaterial( { color: this.impulseInfo.colour, transparent: true, opacity: 0.4 } )
-      const blastRadiusObject = new THREE.Mesh(blastRadiusGeo, blastRadiusMat);
+      //once the animation has finished, we need to check which players are inside the blast radius, and we'll also render a blast radius
+      const blastRadiusObject = new THREE.Mesh(this.blastRadiusGeo, this.blastRadiusMat);
       blastRadiusObject.position.set(destinationPoint.x, destinationPoint.y, destinationPoint.z);
       this.scene.add(blastRadiusObject);
 
@@ -569,8 +583,6 @@ export class AppComponent {
         
         if (blastRadiusBB.intersectsBox(playerBB))
         {
-          //now we need to apply a vector to the other player, and also set the currentForce property in the player's database to that
-
           //calculte vector from destinationPoint to the playersPosition
           const playerKnockbackVector = {x: player.cBody.position.x - destinationPoint.x, y: player.cBody.position.y - destinationPoint.y, z: player.cBody.position.z - destinationPoint.z};
 
@@ -579,6 +591,15 @@ export class AppComponent {
           set(dbRef, playerKnockbackVector)
         }
       }
+      //we can also check ourself, and apply an impulse to our self
+      const selfBB = new THREE.Box3().setFromObject(this.player.tBody);
+      if (blastRadiusBB.intersectsBox(selfBB))
+      {
+        const playerKnockbackVector = {x: this.player.cBody.position.x - destinationPoint.x, y: this.player.cBody.position.y - destinationPoint.y, z: this.player.cBody.position.z - destinationPoint.z};
+        const dbRef = ref(this.db, "players/" + this.playerInfo.deviceID + "/currentImpluse");
+        set(dbRef, playerKnockbackVector)
+      }
+
       setTimeout(() => { this.scene.remove(blastRadiusObject);}, 300);
     });
   }
@@ -611,7 +632,7 @@ export class AppComponent {
         //need to upload the absolute values for the projectile to the realtime database
         set(dbRef, {x: projectile.position.x, y: projectile.position.y, z: projectile.position.z, senderID: this.playerInfo.deviceID});
 
-        if (counter >= intervals) { clearInterval(interval); setTimeout(() => {this.scene.remove(projectile);}, 100); remove(dbRef); resolve("Finish animation"); } //once animation has finished remove it
+        if (counter >= intervals) { clearInterval(interval); this.scene.remove(projectile); remove(dbRef); resolve("Finish animation"); } //once animation has finished remove it
         counter += 1;
       }, 0.1);
     })
@@ -659,7 +680,7 @@ export class AppComponent {
   mobileControls()
   {
     const colour = `#${this.playerInfo.colour.toString(16).toUpperCase()}`;
-    var joy = new JoyStick('joyDiv', {internalFillColor: colour, externalStrokeColor: "#000000" });
+    var joy = new JoyStick('joyDiv', {internalFillColor: colour, internalStrokeColor: "#000000", externalStrokeColor: "#000000" });
     joy.internalFillColor = "red";
 
     //check controls with the refresh rate
