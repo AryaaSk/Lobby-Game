@@ -516,7 +516,7 @@ export class AppComponent {
       for (let deviceID in playerData)
       {
         this.otherPlayersObjects[Number(deviceID)] = playerData[deviceID];
-        //this.otherPlayersObjects[playerData[key].data.deviceID] = playerData[key].data;
+        //this.otherPlayersObjects[playerData[key].data.deviceID] = playerData[key].data; 
       }
     });
 
