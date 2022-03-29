@@ -4,7 +4,7 @@
     width: 100vw; 
     position: fixed;
 
-    background-color: #0d0d0d;
+    /*background-color: #0d0d0d; It is set in the styles.css*/
 
     overflow: hidden; 
 }

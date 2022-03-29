@@ -116,10 +116,10 @@ export class AppComponent {
       this.startDataLoop();
 
       this.mobileControls();
-      document.getElementById("popupText")!.style.fontSize = "3rem";
+      document.getElementById("popupText")!.style.fontSize = "2rem";
       setTimeout(() => {
         document.getElementById("container")!.style.backgroundColor = "transparent";
-        this.popup("Press Q to toggle shoot mode", 2000);
+        this.popup("Use the controls to move and click somewhere to shoot", 2000);
       }, 50);
     }
     else
