@@ -85,43 +85,10 @@ export class AppComponent {
   renderedImpulses: string[] = []; //keeps track of which impulses have been rendered, not including our ones
 
 
+  
 
 
  
-
-  //Boilerplate Functions:
-  render()
-  { this.renderer.render(this.scene, this.camera); };
-  toRadians(angle: number) {
-    return angle * (Math.PI / 180);
-  }
-  togglePointerLock()
-  {
-    if (this.pointerLock == true)
-    { this.pointerLock = false; document.exitPointerLock(); }
-    else
-    { this.pointerLock = true; document.body.requestPointerLock(); }
-  }
-  syncCameraToPlayer()
-  {
-    const cameraRotationY = -this.player.bearing.y; this.camera.rotation.y = this.toRadians(cameraRotationY); //we also want to match the camera to the player's bearing.y
-    //position exactly where player is, then move backwards by distance
-    this.camera.position.set(this.player.tBody.position.x, this.playerInfo.camera.setY, this.player.tBody.position.z);
-    this.camera.translateZ(this.playerInfo.camera.distance);
-  }
-  popup(text: string, time: number)
-  {
-    this.popupText = text;
-    document.getElementById("popupText")!.style.opacity = "100%"
-    setTimeout(() => {
-      document.getElementById("popupText")!.style.opacity = "0%"
-    }, time);
-  }
-
-
-
-
-
   //STARTUP:
   checkMobile()
   {
@@ -179,6 +146,40 @@ export class AppComponent {
 
       }, {once : true} );
     }
+  }
+
+
+  
+
+
+ 
+  //Boilerplate Functions:
+  render()
+  { this.renderer.render(this.scene, this.camera); };
+  toRadians(angle: number) {
+    return angle * (Math.PI / 180);
+  }
+  togglePointerLock()
+  {
+    if (this.pointerLock == true)
+    { this.pointerLock = false; document.exitPointerLock(); }
+    else
+    { this.pointerLock = true; document.body.requestPointerLock(); }
+  }
+  syncCameraToPlayer()
+  {
+    const cameraRotationY = -this.player.bearing.y; this.camera.rotation.y = this.toRadians(cameraRotationY); //we also want to match the camera to the player's bearing.y
+    //position exactly where player is, then move backwards by distance
+    this.camera.position.set(this.player.tBody.position.x, this.playerInfo.camera.setY, this.player.tBody.position.z);
+    this.camera.translateZ(this.playerInfo.camera.distance);
+  }
+  popup(text: string, time: number)
+  {
+    this.popupText = text;
+    document.getElementById("popupText")!.style.opacity = "100%"
+    setTimeout(() => {
+      document.getElementById("popupText")!.style.opacity = "0%"
+    }, time);
   }
 
 
